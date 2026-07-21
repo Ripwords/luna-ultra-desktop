@@ -15,6 +15,7 @@ const emit = defineEmits<{
   next: [];
   download: [];
   delete: [];
+  loaded: [dimensions: { width: number; height: number }];
 }>();
 
 const takenLabel = computed(() => {
@@ -78,6 +79,7 @@ defineShortcuts({
             :alt="item.name"
             eager
             img-class="max-h-full max-w-full object-contain"
+            @loaded="emit('loaded', $event)"
           />
           <RawImage
             v-else

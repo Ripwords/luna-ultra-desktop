@@ -3,6 +3,7 @@ import ConfirmModal from "~/components/ConfirmModal.vue";
 import DownloadOptionsModal from "~/components/DownloadOptionsModal.vue";
 import type { MediaItem } from "~/types/media";
 import type { MediaFilter, StorageFilter, ThumbSize } from "~/composables/useGallery";
+import { isEquirectangular } from "~/utils/media";
 
 useHead({ title: "Gallery" });
 
@@ -64,6 +65,23 @@ const previewOpen = ref(false);
 const previewId = ref<string | null>(null);
 const previewItem = computed(() => (previewId.value ? (allById.value.get(previewId.value) ?? null) : null));
 const previewIndex = computed(() => (previewId.value ? orderedIds.value.indexOf(previewId.value) : -1));
+
+/**
+ * Record a photo's real pixel size once it decodes, and promote it to an
+ * interactive 360 when it turns out to be equirectangular (2:1). The Luna's
+ * 360 stills are named IMG_*.jpg with no pano metadata, so this is the only
+ * reliable point of detection. Mutating the shared library item reactively
+ * updates its grid badge and swaps the open preview to the pano viewer.
+ */
+function annotateDimensions(item: MediaItem | null, dimensions: { width: number; height: number }) {
+  if (!item || item.type !== "photo") return;
+  if (item.width === dimensions.width && item.height === dimensions.height) return;
+  item.width = dimensions.width;
+  item.height = dimensions.height;
+  if (!item.panoramic && isEquirectangular(dimensions.width, dimensions.height)) {
+    item.panoramic = true;
+  }
+}
 
 function openPreview(item: MediaItem) {
   previewId.value = item.id;
@@ -243,6 +261,7 @@ defineShortcuts({
               :selection-active="selectionActive"
               @open="openPreview(item)"
               @select="select(item, $event)"
+              @loaded="annotateDimensions(item, $event)"
             />
           </div>
         </section>
@@ -265,6 +284,7 @@ defineShortcuts({
         @next="stepPreview(1)"
         @download="onDownloadFromPreview"
         @delete="onDeleteFromPreview"
+        @loaded="annotateDimensions(previewItem, $event)"
       />
     </template>
   </UDashboardPanel>

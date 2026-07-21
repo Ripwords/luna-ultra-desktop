@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [];
   select: [event: MouseEvent];
+  loaded: [dimensions: { width: number; height: number }];
 }>();
 
 function onTileClick(event: MouseEvent) {
@@ -43,6 +44,7 @@ function onTileClick(event: MouseEvent) {
       :alt="item.name"
       img-class="size-full object-cover transition-transform duration-300"
       :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
+      @loaded="emit('loaded', $event)"
     />
     <RawImage
       v-else

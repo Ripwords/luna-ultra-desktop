@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDuration, dayLabel, groupByDay } from "~/utils/media";
+import { formatBytes, formatDuration, dayLabel, groupByDay, isEquirectangular } from "~/utils/media";
 import type { MediaItem } from "~/types/media";
 
 function item(id: string, takenAt: string, type: "photo" | "video" = "photo"): MediaItem {
@@ -81,5 +81,25 @@ describe("dayLabel", () => {
 
   it("labels older days with a readable date", () => {
     expect(dayLabel("2026-07-04", today)).toBe("July 4, 2026");
+  });
+});
+
+describe("isEquirectangular", () => {
+  it("detects a 2:1 equirectangular photo (the Luna's 8000x4000 360s)", () => {
+    expect(isEquirectangular(8000, 4000)).toBe(true);
+  });
+
+  it("rejects ordinary photo aspect ratios", () => {
+    expect(isEquirectangular(4000, 3000)).toBe(false); // 4:3
+    expect(isEquirectangular(4000, 2250)).toBe(false); // 16:9
+  });
+
+  it("ignores tiny 2:1 images and missing dimensions", () => {
+    expect(isEquirectangular(200, 100)).toBe(false);
+    expect(isEquirectangular(0, 0)).toBe(false);
+  });
+
+  it("allows a small aspect tolerance", () => {
+    expect(isEquirectangular(8000, 4008)).toBe(true);
   });
 });

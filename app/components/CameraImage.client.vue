@@ -17,6 +17,18 @@ const props = withDefaults(
   { imgClass: "", eager: false },
 );
 
+const emit = defineEmits<{
+  /** Fired once the browser has decoded the image; carries its real pixel size. */
+  loaded: [dimensions: { width: number; height: number }];
+}>();
+
+function onImgLoad(event: Event) {
+  const img = event.target as HTMLImageElement;
+  if (img.naturalWidth && img.naturalHeight) {
+    emit("loaded", { width: img.naturalWidth, height: img.naturalHeight });
+  }
+}
+
 const el = ref<HTMLElement | null>(null);
 const objectUrl = ref<string | null>(null);
 const state = ref<"idle" | "loading" | "loaded" | "error">("idle");
@@ -74,6 +86,7 @@ onBeforeUnmount(() => {
       :alt="alt"
       draggable="false"
       :class="imgClass"
+      @load="onImgLoad"
     />
     <div
       v-else

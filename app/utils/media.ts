@@ -32,6 +32,19 @@ export function imageMimeFor(urlOrName: string): string | null {
   }
 }
 
+/**
+ * Equirectangular 360 photos are always 2:1. The Luna tags its 360 stills with
+ * neither a PANO_ filename nor GPano/XMP metadata, so once we know a photo's
+ * real pixel size (from the decoded image) the aspect ratio is the only
+ * reliable signal that it should open in the interactive viewer. Flat photos
+ * are never 2:1, so this self-selects. The size floor avoids matching tiny 2:1
+ * thumbnails or crops.
+ */
+export function isEquirectangular(width: number, height: number): boolean {
+  if (!width || !height || width < 2048) return false;
+  return Math.abs(width / height - 2) < 0.02;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB", "TB"];
