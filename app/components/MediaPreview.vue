@@ -36,6 +36,9 @@ defineShortcuts({
   arrowright: () => {
     if (open.value) emit("next");
   },
+  escape: () => {
+    if (open.value) open.value = false;
+  },
 });
 </script>
 

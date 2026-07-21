@@ -131,6 +131,17 @@ describe("decodeRawPreview", () => {
     expect(g).toBeGreaterThan(80);
   });
 
+  it("still decodes when the buffer is truncated a few bytes short of EOF", () => {
+    const full = buildRawDng({ width: 32, height: 32, samples: flatFrame(32, 32, 30000, 30000, 30000) });
+    // Chop the tail: a streamed download that stopped a few bytes early.
+    const truncated = full.slice(0, full.byteLength - 200);
+    const meta = parseRawImageMeta(truncated)!;
+    expect(meta).not.toBeNull();
+    const out = decodeRawPreview(truncated, meta, 8);
+    expect(out).not.toBeNull();
+    expect(out!.height).toBeGreaterThan(0);
+  });
+
   it("routes CFA channels correctly (red-dominant raw -> red output) with WB off", () => {
     const buf = buildRawDng({ width: 16, height: 16, samples: flatFrame(16, 16, 60000, 20000, 20000) });
     const meta = parseRawImageMeta(buf)!;

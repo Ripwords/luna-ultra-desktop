@@ -25,11 +25,25 @@ const state = ref<"idle" | "loading" | "loaded" | "error">("idle");
 
 let observer: IntersectionObserver | null = null;
 let triedFallback = false;
+let stallTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * WebKit can silently never fire loadedmetadata/seeked for some videos (e.g. a
+ * .mov whose moov atom is at the end and the range fetch stalls), leaving the
+ * tile grey forever. Bound the wait: fall back to the full file, then error.
+ */
+function armStallTimer() {
+  if (stallTimer) clearTimeout(stallTimer);
+  stallTimer = setTimeout(() => {
+    if (state.value === "loading") onError();
+  }, 12_000);
+}
 
 function begin() {
   if (state.value !== "idle") return;
   state.value = "loading";
   activeSrc.value = props.lrv || props.src;
+  armStallTimer();
 }
 
 function onMeta() {
@@ -44,16 +58,19 @@ function onMeta() {
 }
 
 function onReady() {
+  if (stallTimer) clearTimeout(stallTimer);
   state.value = "loaded";
 }
 
 function onError() {
-  // If the proxy failed, retry once with the full-resolution file.
+  // If the proxy failed (or stalled), retry once with the full-resolution file.
   if (!triedFallback && props.lrv && props.lrv !== props.src) {
     triedFallback = true;
     activeSrc.value = props.src;
+    armStallTimer();
     return;
   }
+  if (stallTimer) clearTimeout(stallTimer);
   state.value = "error";
 }
 
@@ -76,7 +93,10 @@ onMounted(async () => {
   observer.observe(el.value);
 });
 
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  if (stallTimer) clearTimeout(stallTimer);
+});
 </script>
 
 <template>

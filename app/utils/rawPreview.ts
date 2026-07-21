@@ -168,17 +168,22 @@ export function decodeRawPreview(
   if (meta.compression !== 1) return null;
   const view = new DataView(buffer);
   const little = view.getUint16(0, false) === 0x4949;
-  const { width, height, stripOffset, stripByteCount } = meta;
-  if (stripOffset + stripByteCount > view.byteLength) return null;
-  if (stripByteCount < width * height * 2) return null; // expects 16-bit samples
+  const { width, height, stripOffset } = meta;
 
   // Colour index (0=R 1=G 2=B) for each of the four positions in a 2x2 block.
   const p = meta.cfaPattern;
-  if (p.length < 4) return null;
+  if (p.length < 4 || width < 2 || height < 2 || stripOffset <= 0) return null;
 
-  // Bayer blocks form a (width/2) x (height/2) grid; scale that to <= maxDim.
+  // The raw strip typically runs to the exact end of the file, so a streamed
+  // download that stops even a few bytes short would fail the whole preview if
+  // we demanded every row. Decode only as many full rows as actually arrived.
+  const availableBytes = view.byteLength - stripOffset;
+  const usableRows = Math.min(height, Math.floor(availableBytes / (width * 2)));
+  if (usableRows < 2) return null;
+
+  // Bayer blocks form a (width/2) x (usableRows/2) grid; scale that to <= maxDim.
   const blockW = Math.floor(width / 2);
-  const blockH = Math.floor(height / 2);
+  const blockH = Math.floor(usableRows / 2);
   const scale = Math.min(1, maxDim / Math.max(blockW, blockH));
   const outW = Math.max(1, Math.floor(blockW * scale));
   const outH = Math.max(1, Math.floor(blockH * scale));
