@@ -70,8 +70,19 @@ watch(isConnected, (connected) => {
                 icon="i-lucide-triangle-alert"
                 color="error"
                 variant="subtle"
-                :description="error"
-              />
+                :title="error"
+              >
+                <template #description>
+                  <ul class="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                    <li>Make sure your computer is joined to the camera's Wi-Fi network.</li>
+                    <li>Confirm the address matches the camera's gateway (default <span class="font-mono">192.168.42.1</span>).</li>
+                    <li>
+                      On macOS, allow <span class="font-medium">Luna Ultra Desktop</span> under System Settings ›
+                      Privacy &amp; Security › Local Network.
+                    </li>
+                  </ul>
+                </template>
+              </UAlert>
 
               <div class="flex items-center gap-3">
                 <UButton

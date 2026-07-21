@@ -18,6 +18,13 @@ export function useUpdater() {
   // Hold the pending update between check() and install()
   let pending: Awaited<ReturnType<typeof import("@tauri-apps/plugin-updater")["check"]>> | null = null;
 
+  function messageOf(e: unknown, fallback: string): string {
+    // Tauri commands reject with a plain string, not an Error instance.
+    if (typeof e === "string" && e.trim()) return e;
+    if (e instanceof Error && e.message) return e.message;
+    return fallback;
+  }
+
   async function check(silent = false) {
     if (!isTauri()) return;
     phase.value = "checking";
@@ -33,8 +40,12 @@ export function useUpdater() {
         phase.value = silent ? "idle" : "uptodate";
       }
     } catch (e) {
-      phase.value = "error";
-      errorMessage.value = e instanceof Error ? e.message : "Update check failed.";
+      // A background/automatic check that fails (offline, no release yet, a
+      // transient network error) must not nag the user with a red banner.
+      // Only surface errors for a check the user explicitly triggered.
+      errorMessage.value = messageOf(e, "Update check failed.");
+      phase.value = silent ? "idle" : "error";
+      if (import.meta.dev) console.warn("[updater] check failed:", errorMessage.value);
     }
   }
 
@@ -59,7 +70,7 @@ export function useUpdater() {
       await relaunch();
     } catch (e) {
       phase.value = "error";
-      errorMessage.value = e instanceof Error ? e.message : "Update installation failed.";
+      errorMessage.value = messageOf(e, "Update installation failed.");
     }
   }
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    macOS 15+ Local Network Privacy: connecting to the camera at 192.168.42.1
+    counts as local-network access and is blocked until the user grants
+    permission. This string is shown in that system prompt.
+  -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Luna Ultra Desktop connects to your Insta360 Luna Ultra camera over your local Wi-Fi network to browse and download your photos and videos.</string>
+</dict>
+</plist>
