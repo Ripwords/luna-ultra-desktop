@@ -79,14 +79,26 @@ defineShortcuts({
             eager
             img-class="max-h-full max-w-full object-contain"
           />
-          <div v-else class="flex flex-col items-center gap-3 text-center text-muted">
-            <UIcon name="i-lucide-aperture" class="size-12 text-dimmed" />
-            <div class="space-y-1">
-              <p class="font-mono text-sm uppercase text-highlighted">{{ item.ext }} file</p>
-              <p class="max-w-xs text-sm">This RAW format can't be previewed in the app. Download it to open in your photo editor.</p>
-            </div>
-            <UButton label="Download" icon="i-lucide-arrow-down-to-line" color="neutral" variant="outline" @click="emit('download')" />
-          </div>
+          <RawImage
+            v-else
+            :key="`raw-${item.id}`"
+            :src="item.srcUrl"
+            :ext="item.ext"
+            eager
+            prefer="largest"
+            img-class="max-h-full max-w-full object-contain"
+          >
+            <template #fallback>
+              <div class="flex flex-col items-center gap-3 text-center text-muted">
+                <UIcon name="i-lucide-aperture" class="size-12 text-dimmed" />
+                <div class="space-y-1">
+                  <p class="font-mono text-sm uppercase text-highlighted">{{ item.ext }} file</p>
+                  <p class="max-w-xs text-sm">No embedded preview in this RAW file. Download it to open in your photo editor.</p>
+                </div>
+                <UButton label="Download" icon="i-lucide-arrow-down-to-line" color="neutral" variant="outline" @click="emit('download')" />
+              </div>
+            </template>
+          </RawImage>
 
           <UButton
             v-if="hasPrev"

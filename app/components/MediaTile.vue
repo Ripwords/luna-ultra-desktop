@@ -44,10 +44,15 @@ function onTileClick(event: MouseEvent) {
       img-class="size-full object-cover transition-transform duration-300"
       :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
     />
-    <div v-else class="flex size-full flex-col items-center justify-center gap-1.5 bg-elevated text-dimmed">
-      <UIcon name="i-lucide-aperture" class="size-6" />
-      <span class="font-mono text-[10px] uppercase tracking-wide">{{ item.ext }}</span>
-    </div>
+    <RawImage
+      v-else
+      :src="item.srcUrl"
+      :ext="item.ext"
+      prefer="smallest"
+      :max-bytes="2_000_000"
+      img-class="size-full object-cover transition-transform duration-300"
+      :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
+    />
 
     <button
       type="button"
