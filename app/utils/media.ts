@@ -51,6 +51,26 @@ export function isEquirectangular(width: number, height: number): boolean {
   return Math.abs(width / height - 2) < 0.02;
 }
 
+/**
+ * Best-guess video MIME from an extension. The camera serves media as
+ * application/octet-stream, which a <video> element won't decode from a blob;
+ * forcing the container type fixes it. LRV proxies are H.264/MP4 despite the
+ * `.lrv` extension. Returns null for unknown types.
+ */
+export function videoMimeFor(urlOrName: string): string | null {
+  const clean = urlOrName.split(/[?#]/)[0] ?? "";
+  const ext = clean.slice(clean.lastIndexOf(".") + 1).toLowerCase();
+  switch (ext) {
+    case "mp4":
+    case "lrv":
+      return "video/mp4";
+    case "mov":
+      return "video/quicktime";
+    default:
+      return null;
+  }
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB", "TB"];

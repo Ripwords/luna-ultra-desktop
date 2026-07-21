@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import { cameraFetch } from "~/utils/lunaClient";
+import { videoMimeFor } from "~/utils/media";
+
 /**
- * Video thumbnail: a real <video> element seeked to its first frame, rather
- * than fetching the whole file and painting a canvas (which is fragile in
- * WebKit and can produce black frames). Streams via HTTP range, works
- * cross-origin (we only display, never read pixels), and falls back from the
- * low-res LRV proxy to the full file if the proxy can't be decoded.
+ * Video thumbnail: a <video> seeked to its first frame. The camera's plain-HTTP
+ * host can't be used as a direct <video src> in the packaged app (same reason
+ * photos go through the Tauri HTTP bridge), and seeking over the network stalls
+ * silently on WebKit — the tile stays grey forever. So we pull the thumbnail
+ * source through the bridge and seek a *local* blob, which is reliable.
+ *
+ * Sources are tried in order: the small LRV proxy (cheap), then a bounded
+ * prefix of the full file. If none yields a frame we show a placeholder rather
+ * than download a multi-hundred-MB video for a thumbnail.
  */
 const props = withDefaults(
   defineProps<{
@@ -20,30 +27,83 @@ const props = withDefaults(
 
 const el = ref<HTMLElement | null>(null);
 const video = ref<HTMLVideoElement | null>(null);
-const activeSrc = ref<string | null>(null);
+const objectUrl = ref<string | null>(null);
 const state = ref<"idle" | "loading" | "loaded" | "error">("idle");
 
 let observer: IntersectionObserver | null = null;
-let triedFallback = false;
 let stallTimer: ReturnType<typeof setTimeout> | null = null;
+let attempt = 0;
 
-/**
- * WebKit can silently never fire loadedmetadata/seeked for some videos (e.g. a
- * .mov whose moov atom is at the end and the range fetch stalls), leaving the
- * tile grey forever. Bound the wait: fall back to the full file, then error.
- */
-function armStallTimer() {
-  if (stallTimer) clearTimeout(stallTimer);
+/** Ordered thumbnail sources: small proxy first, then a bounded prefix. */
+const sources = computed(() => {
+  const list: Array<{ url: string; maxBytes?: number }> = [];
+  if (props.lrv && props.lrv !== props.src) list.push({ url: props.lrv });
+  // Only a prefix of the full file — enough for a fast-start MP4's first frame,
+  // without pulling the whole clip.
+  list.push({ url: props.src, maxBytes: 8_000_000 });
+  return list;
+});
+
+function clearStall() {
+  if (stallTimer) {
+    clearTimeout(stallTimer);
+    stallTimer = null;
+  }
+}
+
+function armStall() {
+  clearStall();
+  // Covers fetch + decode; if nothing rendered, move to the next source.
   stallTimer = setTimeout(() => {
-    if (state.value === "loading") onError();
-  }, 12_000);
+    if (state.value !== "loaded") nextAttempt();
+  }, 20_000);
+}
+
+function revoke() {
+  if (objectUrl.value) {
+    URL.revokeObjectURL(objectUrl.value);
+    objectUrl.value = null;
+  }
+}
+
+async function tryAttempt() {
+  const source = sources.value[attempt];
+  if (!source) {
+    revoke();
+    clearStall();
+    state.value = "error";
+    return;
+  }
+  const token = attempt;
+  armStall();
+  try {
+    const init: RequestInit | undefined = source.maxBytes
+      ? { headers: { Range: `bytes=0-${source.maxBytes - 1}` } }
+      : undefined;
+    const response = await cameraFetch(source.url, init);
+    if (!response.ok && response.status !== 206) throw new Error(String(response.status));
+    let blob = await response.blob();
+    const mime = videoMimeFor(source.url);
+    if (mime && blob.type !== mime) blob = new Blob([blob], { type: mime });
+    if (token !== attempt) return; // superseded by a newer attempt
+    revoke();
+    objectUrl.value = URL.createObjectURL(blob);
+  } catch {
+    if (token === attempt) nextAttempt();
+  }
+}
+
+function nextAttempt() {
+  attempt++;
+  state.value = "loading";
+  void tryAttempt();
 }
 
 function begin() {
   if (state.value !== "idle") return;
   state.value = "loading";
-  activeSrc.value = props.lrv || props.src;
-  armStallTimer();
+  attempt = 0;
+  void tryAttempt();
 }
 
 function onMeta() {
@@ -58,24 +118,15 @@ function onMeta() {
 }
 
 function onReady() {
-  if (stallTimer) clearTimeout(stallTimer);
+  clearStall();
   state.value = "loaded";
 }
 
 function onError() {
-  // If the proxy failed (or stalled), retry once with the full-resolution file.
-  if (!triedFallback && props.lrv && props.lrv !== props.src) {
-    triedFallback = true;
-    activeSrc.value = props.src;
-    armStallTimer();
-    return;
-  }
-  if (stallTimer) clearTimeout(stallTimer);
-  state.value = "error";
+  nextAttempt();
 }
 
 onMounted(async () => {
-  // .client components bind their template ref a tick late
   await nextTick();
   if (props.eager || !("IntersectionObserver" in window) || !el.value) {
     begin();
@@ -95,17 +146,18 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   observer?.disconnect();
-  if (stallTimer) clearTimeout(stallTimer);
+  clearStall();
+  revoke();
 });
 </script>
 
 <template>
   <div ref="el" class="relative size-full">
     <video
-      v-if="activeSrc"
+      v-if="objectUrl"
       ref="video"
-      :key="activeSrc"
-      :src="activeSrc"
+      :key="objectUrl"
+      :src="objectUrl"
       muted
       playsinline
       preload="metadata"

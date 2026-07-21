@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageMimeFor } from "~/utils/media";
+import { imageMimeFor, videoMimeFor } from "~/utils/media";
 import { parseLunaIndex } from "~/utils/lunaIndex";
 
 const BASE = "http://192.168.42.1/storage_internal/DCIM/Camera01/";
@@ -58,5 +58,19 @@ describe("parseLunaIndex format + storage tagging", () => {
     expect(byName("IMG_20260718_142012_00_002").panoramic).toBe(false); // plain jpg
     expect(byName("IMG_20260718_142012_00_003").panoramic).toBe(false); // dng
     expect(byName("VID").panoramic).toBe(false); // video
+  });
+});
+
+describe("videoMimeFor", () => {
+  it("maps video containers, treating LRV proxies as MP4", () => {
+    expect(videoMimeFor("VID_1.mp4")).toBe("video/mp4");
+    expect(videoMimeFor("LRV_1.lrv")).toBe("video/mp4");
+    expect(videoMimeFor("VID_1.mov")).toBe("video/quicktime");
+    expect(videoMimeFor("http://cam/VID_1.mp4?x=1")).toBe("video/mp4");
+  });
+
+  it("returns null for non-video types", () => {
+    expect(videoMimeFor("a.jpg")).toBeNull();
+    expect(videoMimeFor("a.dng")).toBeNull();
   });
 });
