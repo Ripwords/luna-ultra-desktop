@@ -22,10 +22,10 @@ const setVersion = (file, re, replacement) => writeFileSync(file, readFileSync(f
 if (explicit) {
   // Deterministic path: WE choose the version, changelogen only writes notes.
   setVersion("package.json", /("version":\s*)"[^"]+"/, `$1"${explicit}"`);
-  run("bun x changelogen"); // CHANGELOG.md only, headed by the version we just set
+  run("bun x changelogen --output CHANGELOG.md"); // headed by the version we just set
 } else {
   // changelogen determines the next version from Conventional Commits.
-  run(`bun x changelogen --bump ${args.join(" ")}`.trim());
+  run(`bun x changelogen --bump --output CHANGELOG.md ${args.join(" ")}`.trim());
 }
 
 const version = JSON.parse(readFileSync("package.json", "utf8")).version;
