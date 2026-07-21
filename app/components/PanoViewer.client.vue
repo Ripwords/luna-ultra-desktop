@@ -2,6 +2,7 @@
 import "pannellum/build/pannellum.css";
 import { cameraFetch } from "~/utils/lunaClient";
 import { imageMimeFor } from "~/utils/media";
+import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
 
 /**
  * Interactive 360 / panorama viewer built on Pannellum. The equirectangular
@@ -20,11 +21,13 @@ onMounted(async () => {
   await nextTick();
   if (!container.value) return;
   try {
-    const response = await cameraFetch(props.src);
-    if (!response.ok) throw new Error(String(response.status));
-    let blob = await response.blob();
-    const mime = imageMimeFor(props.src);
-    if (mime && blob.type !== mime) blob = new Blob([blob], { type: mime });
+    const blob = await withCameraSlot(async () => {
+      const response = await cameraFetch(props.src);
+      if (!response.ok) throw new Error(String(response.status));
+      const raw = await response.blob();
+      const mime = imageMimeFor(props.src);
+      return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
+    }, CAMERA_PRIORITY.PREVIEW);
     objectUrl = URL.createObjectURL(blob);
 
     // UMD build: attaches window.pannellum as a side effect

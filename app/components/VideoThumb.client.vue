@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { cameraFetch } from "~/utils/lunaClient";
 import { videoMimeFor } from "~/utils/media";
+import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
 
 /**
  * Video thumbnail: a <video> seeked to its first frame. The camera's plain-HTTP
@@ -32,15 +33,19 @@ const state = ref<"idle" | "loading" | "loaded" | "error">("idle");
 
 let observer: IntersectionObserver | null = null;
 let stallTimer: ReturnType<typeof setTimeout> | null = null;
+let controller: AbortController | null = null;
 let attempt = 0;
 
-/** Ordered thumbnail sources: small proxy first, then a bounded prefix. */
+/**
+ * Ordered thumbnail sources: small proxy first, then a bounded prefix of the
+ * full file. Every source is byte-bounded so a single thumbnail can't hold a
+ * shared camera slot for long. A fast-start MP4/LRV carries its moov + first
+ * frame near the head; these sizes are device-tunable.
+ */
 const sources = computed(() => {
-  const list: Array<{ url: string; maxBytes?: number }> = [];
-  if (props.lrv && props.lrv !== props.src) list.push({ url: props.lrv });
-  // Only a prefix of the full file — enough for a fast-start MP4's first frame,
-  // without pulling the whole clip.
-  list.push({ url: props.src, maxBytes: 8_000_000 });
+  const list: Array<{ url: string; maxBytes: number }> = [];
+  if (props.lrv && props.lrv !== props.src) list.push({ url: props.lrv, maxBytes: 6_000_000 });
+  list.push({ url: props.src, maxBytes: 3_000_000 });
   return list;
 });
 
@@ -53,10 +58,11 @@ function clearStall() {
 
 function armStall() {
   clearStall();
-  // Covers fetch + decode; if nothing rendered, move to the next source.
+  // Covers fetch + decode; if nothing rendered, abort (freeing the camera slot)
+  // and move to the next source.
   stallTimer = setTimeout(() => {
     if (state.value !== "loaded") nextAttempt();
-  }, 20_000);
+  }, 12_000);
 }
 
 function revoke() {
@@ -75,16 +81,21 @@ async function tryAttempt() {
     return;
   }
   const token = attempt;
+  const signal = controller?.signal;
   armStall();
   try {
-    const init: RequestInit | undefined = source.maxBytes
-      ? { headers: { Range: `bytes=0-${source.maxBytes - 1}` } }
-      : undefined;
-    const response = await cameraFetch(source.url, init);
-    if (!response.ok && response.status !== 206) throw new Error(String(response.status));
-    let blob = await response.blob();
-    const mime = videoMimeFor(source.url);
-    if (mime && blob.type !== mime) blob = new Blob([blob], { type: mime });
+    // Thumbnails share the limited camera slots at the lowest priority so they
+    // never starve an opened preview or the photo tiles.
+    const blob = await withCameraSlot(async () => {
+      const response = await cameraFetch(source.url, {
+        headers: { Range: `bytes=0-${source.maxBytes - 1}` },
+        signal,
+      });
+      if (!response.ok && response.status !== 206) throw new Error(String(response.status));
+      const raw = await response.blob();
+      const mime = videoMimeFor(source.url);
+      return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
+    }, CAMERA_PRIORITY.THUMBNAIL);
     if (token !== attempt) return; // superseded by a newer attempt
     revoke();
     objectUrl.value = URL.createObjectURL(blob);
@@ -94,6 +105,8 @@ async function tryAttempt() {
 }
 
 function nextAttempt() {
+  controller?.abort(); // free the camera slot if the previous fetch is still running
+  controller = new AbortController();
   attempt++;
   state.value = "loading";
   void tryAttempt();
@@ -103,6 +116,7 @@ function begin() {
   if (state.value !== "idle") return;
   state.value = "loading";
   attempt = 0;
+  controller = new AbortController();
   void tryAttempt();
 }
 
@@ -147,6 +161,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   observer?.disconnect();
   clearStall();
+  controller?.abort();
   revoke();
 });
 </script>

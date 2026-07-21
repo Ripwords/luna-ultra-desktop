@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { cameraFetch } from "~/utils/lunaClient";
 import { imageMimeFor } from "~/utils/media";
+import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
 
 /**
  * Loads a camera image through the Tauri HTTP plugin (the camera's plain-HTTP
@@ -38,14 +39,18 @@ let observer: IntersectionObserver | null = null;
 async function load() {
   if (state.value !== "idle") return;
   state.value = "loading";
+  // Full-screen views (eager) outrank background grid thumbnails for the camera.
+  const priority = props.eager ? CAMERA_PRIORITY.PREVIEW : CAMERA_PRIORITY.THUMBNAIL;
   try {
-    const response = await cameraFetch(props.src);
-    if (!response.ok) throw new Error(String(response.status));
-    let blob = await response.blob();
-    // The camera may serve images as octet-stream; force the right MIME so
-    // the browser renders the blob (fixes .insp and mistyped JPEGs).
-    const mime = imageMimeFor(props.src);
-    if (mime && blob.type !== mime) blob = new Blob([blob], { type: mime });
+    const blob = await withCameraSlot(async () => {
+      const response = await cameraFetch(props.src);
+      if (!response.ok) throw new Error(String(response.status));
+      const raw = await response.blob();
+      // The camera may serve images as octet-stream; force the right MIME so
+      // the browser renders the blob (fixes .insp and mistyped JPEGs).
+      const mime = imageMimeFor(props.src);
+      return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
+    }, priority);
     objectUrl.value = URL.createObjectURL(blob);
     state.value = "loaded";
   } catch {

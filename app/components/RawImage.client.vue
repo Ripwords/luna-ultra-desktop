@@ -3,6 +3,7 @@ import { cameraFetch } from "~/utils/lunaClient";
 import { extractDngPreview } from "~/utils/dng";
 import { parseRawImageMeta, decodeRawPreview } from "~/utils/rawPreview";
 import { formatBytes } from "~/utils/media";
+import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
 
 /**
  * Shows a RAW (e.g. DNG) file. Prefers an embedded preview JPEG; when the file
@@ -91,20 +92,28 @@ async function load() {
   if (state.value !== "idle") return;
   state.value = "loading";
   phase.value = "downloading";
+  // Full-screen preview outranks grid thumbnails for the shared camera slots.
+  const priority = props.maxBytes ? CAMERA_PRIORITY.THUMBNAIL : CAMERA_PRIORITY.PREVIEW;
   try {
-    const init: RequestInit = props.maxBytes ? { headers: { Range: `bytes=0-${props.maxBytes - 1}` } } : {};
-    const response = await cameraFetch(props.src, init);
-    if (!response.ok) throw new Error(String(response.status));
-    // If we asked for a byte range (grid thumbnail) but the camera ignored it
-    // and would send the whole multi-MB file, skip rather than download it.
-    if (props.maxBytes && response.status !== 206) {
-      const len = Number(response.headers.get("content-length") ?? 0);
-      if (len === 0 || len > props.maxBytes * 2) {
-        state.value = "nopreview";
-        return;
+    // Hold one camera slot for the entire download (fetch + streamed read); the
+    // CPU-bound decode below runs after the slot is released.
+    const buffer = await withCameraSlot(async () => {
+      const init: RequestInit = props.maxBytes ? { headers: { Range: `bytes=0-${props.maxBytes - 1}` } } : {};
+      const response = await cameraFetch(props.src, init);
+      if (!response.ok) throw new Error(String(response.status));
+      // If we asked for a byte range (grid thumbnail) but the camera ignored it
+      // and would send the whole multi-MB file, skip rather than download it.
+      if (props.maxBytes && response.status !== 206) {
+        const len = Number(response.headers.get("content-length") ?? 0);
+        if (len === 0 || len > props.maxBytes * 2) return null;
       }
+      return await downloadBuffer(response);
+    }, priority);
+
+    if (buffer === null) {
+      state.value = "nopreview";
+      return;
     }
-    const buffer = await downloadBuffer(response);
 
     // Fast path: an embedded preview JPEG (many RAW formats carry one).
     const embedded = extractDngPreview(buffer, props.prefer);
