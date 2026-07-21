@@ -37,14 +37,16 @@ let controller: AbortController | null = null;
 let attempt = 0;
 
 /**
- * Ordered thumbnail sources: small proxy first, then a bounded prefix of the
- * full file. Every source is byte-bounded so a single thumbnail can't hold a
- * shared camera slot for long. A fast-start MP4/LRV carries its moov + first
- * frame near the head; these sizes are device-tunable.
+ * Ordered thumbnail sources. The small LRV proxy is downloaded in FULL — a
+ * partial file has no complete moov/mdat and won't decode in <video>, and the
+ * concurrency limiter (not byte bounds) is what protects the camera from
+ * overload. The full-resolution file is a last resort, byte-bounded so we never
+ * pull a multi-hundred-MB clip; it only decodes for a fast-start MP4 whose moov
+ * + first frame sit near the head.
  */
 const sources = computed(() => {
-  const list: Array<{ url: string; maxBytes: number }> = [];
-  if (props.lrv && props.lrv !== props.src) list.push({ url: props.lrv, maxBytes: 6_000_000 });
+  const list: Array<{ url: string; maxBytes?: number }> = [];
+  if (props.lrv && props.lrv !== props.src) list.push({ url: props.lrv });
   list.push({ url: props.src, maxBytes: 3_000_000 });
   return list;
 });
@@ -58,11 +60,12 @@ function clearStall() {
 
 function armStall() {
   clearStall();
-  // Covers fetch + decode; if nothing rendered, abort (freeing the camera slot)
-  // and move to the next source.
+  // Backstop for a silent hang: covers download + decode. Generous because a
+  // full LRV over the camera Wi-Fi is legitimately slow; a real hang still
+  // resolves to the next source / placeholder rather than staying grey.
   stallTimer = setTimeout(() => {
     if (state.value !== "loaded") nextAttempt();
-  }, 12_000);
+  }, 30_000);
 }
 
 function revoke() {
@@ -87,11 +90,16 @@ async function tryAttempt() {
     // Thumbnails share the limited camera slots at the lowest priority so they
     // never starve an opened preview or the photo tiles.
     const blob = await withCameraSlot(async () => {
-      const response = await cameraFetch(source.url, {
-        headers: { Range: `bytes=0-${source.maxBytes - 1}` },
-        signal,
-      });
+      const init: RequestInit = { signal };
+      if (source.maxBytes) init.headers = { Range: `bytes=0-${source.maxBytes - 1}` };
+      const response = await cameraFetch(source.url, init);
       if (!response.ok && response.status !== 206) throw new Error(String(response.status));
+      // Bounded source but the camera ignored Range and would send the whole
+      // multi-hundred-MB clip: bail rather than pull it for a thumbnail.
+      if (source.maxBytes && response.status !== 206) {
+        const len = Number(response.headers.get("content-length") ?? 0);
+        if (len === 0 || len > source.maxBytes * 2) throw new Error("range-ignored");
+      }
       const raw = await response.blob();
       const mime = videoMimeFor(source.url);
       return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
