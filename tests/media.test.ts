@@ -102,4 +102,8 @@ describe("isEquirectangular", () => {
   it("allows a small aspect tolerance", () => {
     expect(isEquirectangular(8000, 4008)).toBe(true);
   });
+
+  it("excludes the 200MP stitched 2:1 mode (not a true sphere)", () => {
+    expect(isEquirectangular(20000, 10000)).toBe(false);
+  });
 });

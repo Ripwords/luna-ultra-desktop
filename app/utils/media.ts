@@ -35,13 +35,19 @@ export function imageMimeFor(urlOrName: string): string | null {
 /**
  * Equirectangular 360 photos are always 2:1. The Luna tags its 360 stills with
  * neither a PANO_ filename nor GPano/XMP metadata, so once we know a photo's
- * real pixel size (from the decoded image) the aspect ratio is the only
- * reliable signal that it should open in the interactive viewer. Flat photos
- * are never 2:1, so this self-selects. The size floor avoids matching tiny 2:1
- * thumbnails or crops.
+ * real pixel size (from the decoded image) the aspect ratio is the primary
+ * signal that it should open in the interactive viewer. Ordinary photos are
+ * never 2:1, so this self-selects.
+ *
+ * The Luna also has a 200MP "stitched" mode (~20000x10000, 24 combined frames)
+ * that is 2:1 but a flat gigapixel photo, NOT a sphere — feeding it to the pano
+ * viewer is wrong. True 360s are ~8000x4000 (32MP), so a megapixel ceiling
+ * separates the two. The floor rejects tiny 2:1 thumbnails/crops.
  */
 export function isEquirectangular(width: number, height: number): boolean {
   if (!width || !height || width < 2048) return false;
+  const megapixels = (width * height) / 1_000_000;
+  if (megapixels > 130) return false; // exclude the 200MP stitched panorama
   return Math.abs(width / height - 2) < 0.02;
 }
 
