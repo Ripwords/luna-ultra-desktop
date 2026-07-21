@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.6...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.6...master)
+
+### 🩹 Fixes
+
+- Load video thumbnails through the HTTP bridge as local blobs ([218a0cf](https://github.com/Ripwords/luna-ultra-desktop/commit/218a0cf))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.5...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.5...master)
