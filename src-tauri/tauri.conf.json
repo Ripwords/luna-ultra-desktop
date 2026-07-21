@@ -3,7 +3,7 @@
   "productName": "Luna Ultra Desktop",
   "mainBinaryName": "Luna Ultra Desktop",
   "version": "0.1.0",
-  "identifier": "com.lunaultra.desktop",
+  "identifier": "com.ripwords.luna-ultra-desktop",
   "build": {
     "frontendDist": "../.output/public",
     "devUrl": "http://localhost:3000",
@@ -44,7 +44,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/OWNER/luna-ultra-desktop/releases/latest/download/latest.json"
+        "https://github.com/Ripwords/luna-ultra-desktop/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5RjFGMkNBMjUwQjhDMjYKUldRbWpBc2x5dkx4ZVlXdU8rQm84Zkc1UThSWnlGcmY0TGJHd1V2a0ZEU3JvL0V0R2VLbzl3OFAK"
     }
