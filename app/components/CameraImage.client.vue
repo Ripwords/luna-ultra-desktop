@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { cameraFetch } from "~/utils/lunaClient";
+import { imageMimeFor } from "~/utils/media";
 
 /**
  * Loads a camera image through the Tauri HTTP plugin (the camera's plain-HTTP
@@ -28,7 +29,11 @@ async function load() {
   try {
     const response = await cameraFetch(props.src);
     if (!response.ok) throw new Error(String(response.status));
-    const blob = await response.blob();
+    let blob = await response.blob();
+    // The camera may serve images as octet-stream; force the right MIME so
+    // the browser renders the blob (fixes .insp and mistyped JPEGs).
+    const mime = imageMimeFor(props.src);
+    if (mime && blob.type !== mime) blob = new Blob([blob], { type: mime });
     objectUrl.value = URL.createObjectURL(blob);
     state.value = "loaded";
   } catch {

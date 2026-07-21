@@ -1,10 +1,20 @@
 export type MediaType = "photo" | "video";
 
+/** Which physical storage on the camera a file lives on */
+export type MediaStorage = "internal" | "sdcard";
+
 export interface MediaItem {
   /** Absolute path on camera storage; unique id */
   id: string;
   name: string;
   type: MediaType;
+  storage: MediaStorage;
+  /** Extension in lowercase (jpg, dng, insp, mp4 …) */
+  ext: string;
+  /** True when the browser can render this file directly (not raw like DNG) */
+  renderable: boolean;
+  /** Equirectangular panorama / 360 photo — shown in an interactive viewer */
+  panoramic: boolean;
   /** Unix epoch ms of capture time (filename timestamp, else index column) */
   takenAt: number;
   /** File size in bytes, parsed from the camera's index listing */

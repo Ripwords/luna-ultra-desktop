@@ -38,12 +38,16 @@ function onTileClick(event: MouseEvent) {
       :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
     />
     <CameraImage
-      v-else
+      v-else-if="item.renderable"
       :src="item.srcUrl"
       :alt="item.name"
       img-class="size-full object-cover transition-transform duration-300"
       :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
     />
+    <div v-else class="flex size-full flex-col items-center justify-center gap-1.5 bg-elevated text-dimmed">
+      <UIcon name="i-lucide-aperture" class="size-6" />
+      <span class="font-mono text-[10px] uppercase tracking-wide">{{ item.ext }}</span>
+    </div>
 
     <button
       type="button"
@@ -65,6 +69,14 @@ function onTileClick(event: MouseEvent) {
     >
       <UIcon name="i-lucide-play" class="size-3" />
       <span v-if="item.duration != null">{{ formatDuration(item.duration) }}</span>
+    </span>
+
+    <span
+      v-if="item.panoramic"
+      class="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white backdrop-blur-sm"
+    >
+      <UIcon name="i-lucide-globe" class="size-3" />
+      360
     </span>
   </div>
 </template>

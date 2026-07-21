@@ -2,13 +2,15 @@
 import ConfirmModal from "~/components/ConfirmModal.vue";
 import DownloadOptionsModal from "~/components/DownloadOptionsModal.vue";
 import type { MediaItem } from "~/types/media";
-import type { MediaFilter, ThumbSize } from "~/composables/useGallery";
+import type { MediaFilter, StorageFilter, ThumbSize } from "~/composables/useGallery";
 
 useHead({ title: "Gallery" });
 
 const { isConnected, loadingLibrary, refreshLibrary } = useCamera();
 const {
   filter,
+  storage,
+  hasSdCard,
   thumbSize,
   selected,
   groups,
@@ -30,6 +32,12 @@ const filterTabs: Array<{ label: string; value: MediaFilter }> = [
   { label: "All", value: "all" },
   { label: "Photos", value: "photo" },
   { label: "Videos", value: "video" },
+];
+
+const storageItems: Array<{ label: string; value: StorageFilter; icon: string }> = [
+  { label: "All storage", value: "all", icon: "i-lucide-database" },
+  { label: "Internal", value: "internal", icon: "i-lucide-hard-drive" },
+  { label: "SD card", value: "sdcard", icon: "i-lucide-memory-stick" },
 ];
 
 const sizes: Array<{ value: ThumbSize; icon: string; label: string }> = [
@@ -149,6 +157,15 @@ defineShortcuts({
             :content="false"
             size="xs"
             color="neutral"
+          />
+          <USelect
+            v-if="hasSdCard"
+            v-model="storage"
+            :items="storageItems"
+            value-key="value"
+            size="xs"
+            :icon="storageItems.find((s) => s.value === storage)?.icon"
+            class="w-36"
           />
         </template>
         <template #right>

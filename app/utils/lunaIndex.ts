@@ -1,4 +1,7 @@
-import type { MediaItem } from "~/types/media";
+import type { MediaItem, MediaStorage } from "~/types/media";
+
+/** Photo formats the browser can render directly (insp is JPEG-based). */
+const RENDERABLE_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "bmp", "insp"]);
 
 /**
  * Parser for the Luna Ultra's HTTP media index (autoindex-style HTML pages),
@@ -78,7 +81,7 @@ function proxyKey(name: string): string | null {
   return match ? `${match[1]}_${match[2]}` : null;
 }
 
-export function parseLunaIndex(html: string, baseUrl: string): MediaItem[] {
+export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStorage = "internal"): MediaItem[] {
   interface RawEntry {
     name: string;
     url: string;
@@ -122,10 +125,16 @@ export function parseLunaIndex(html: string, baseUrl: string): MediaItem[] {
     const isVideo = VIDEO_EXTENSIONS.has(entry.extension);
     const key = proxyKey(entry.name);
     const lrv = key ? lrvByKey.get(key) : undefined;
+    // PANO_ shots and Insta360 .insp files are equirectangular 360 photos
+    const panoramic = !isVideo && (/^PANO_/i.test(entry.name) || entry.extension === "insp");
     items.push({
       id: entry.cameraPath,
       name: entry.name,
       type: isVideo ? "video" : "photo",
+      storage,
+      ext: entry.extension,
+      renderable: isVideo || RENDERABLE_IMAGE_EXTENSIONS.has(entry.extension),
+      panoramic,
       takenAt: entry.takenAt,
       size: entry.size,
       cameraPath: entry.cameraPath,

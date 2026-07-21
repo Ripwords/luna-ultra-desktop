@@ -4,18 +4,27 @@ import { rangeSelect, toggleGroup, toggleId } from "~/utils/selection";
 import { lunaClient } from "~/utils/lunaClient";
 
 export type MediaFilter = "all" | "photo" | "video";
+export type StorageFilter = "all" | "internal" | "sdcard";
 export type ThumbSize = "sm" | "md" | "lg";
 
 export function useGallery() {
   const { library, removeFromLibrary } = useCamera();
   const filter = useState<MediaFilter>("gallery-filter", () => "all");
+  const storage = useState<StorageFilter>("gallery-storage", () => "all");
   const thumbSize = useState<ThumbSize>("gallery-thumb-size", () => "md");
   const selected = useState<Set<string>>("gallery-selected", () => new Set());
   const anchor = useState<string | null>("gallery-anchor", () => null);
   const toast = useToast();
 
+  /** True once the camera reports files on a removable SD card. */
+  const hasSdCard = computed(() => library.value.some((item) => item.storage === "sdcard"));
+
   const filtered = computed(() =>
-    filter.value === "all" ? library.value : library.value.filter((item) => item.type === filter.value),
+    library.value.filter((item) => {
+      if (filter.value !== "all" && item.type !== filter.value) return false;
+      if (storage.value !== "all" && item.storage !== storage.value) return false;
+      return true;
+    }),
   );
 
   const groups = computed(() =>
@@ -81,6 +90,8 @@ export function useGallery() {
 
   return {
     filter,
+    storage,
+    hasSdCard,
     thumbSize,
     selected,
     groups,

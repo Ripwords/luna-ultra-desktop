@@ -13,6 +13,7 @@
         "@tauri-apps/plugin-process": "^2.3.1",
         "@tauri-apps/plugin-updater": "^2.10.1",
         "nuxt": "^4.5.0",
+        "pannellum": "^2.5.7",
         "tailwindcss": "^4.3.3",
         "three": "^0.185.1",
       },
@@ -1308,6 +1309,8 @@
     "package-json-from-dist": ["package-json-from-dist@1.0.1", "", {}, "sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw=="],
 
     "package-manager-detector": ["package-manager-detector@1.7.0", "", {}, "sha512-xg1eHpwYL/D/HEdWw2goFZP6vV0FH7W+PZ5rFkGjdIDLtxq7EkzBUeT3m+lndYCt8wKbmofUu1MUdMCXkCk9ZQ=="],
+
+    "pannellum": ["pannellum@2.5.7", "", {}, "sha512-AHMRYdLPxetwhBg4lO5EgoZ55C/e+wrJF2WaFQIQA18HSVcvLvsdXEjDL7WpD8MPIFwNnH9qoUDsUqP8cF4pgA=="],
 
     "parseurl": ["parseurl@1.3.3", "", {}, "sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ=="],
 

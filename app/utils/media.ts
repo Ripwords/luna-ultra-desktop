@@ -5,6 +5,33 @@ export interface MediaGroup {
   items: MediaItem[];
 }
 
+/**
+ * Best-guess image MIME type from a URL/filename extension. The camera often
+ * serves files as application/octet-stream, which stops the browser from
+ * rendering the blob; forcing the right type fixes JPEG-based formats like
+ * `.insp`. Returns null for formats the browser can't render (e.g. `.dng`).
+ */
+export function imageMimeFor(urlOrName: string): string | null {
+  const clean = urlOrName.split(/[?#]/)[0] ?? "";
+  const ext = clean.slice(clean.lastIndexOf(".") + 1).toLowerCase();
+  switch (ext) {
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "bmp":
+      return "image/bmp";
+    case "jpg":
+    case "jpeg":
+    case "insp": // Insta360 photo container — JPEG bytes
+      return "image/jpeg";
+    default:
+      return null;
+  }
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB", "TB"];

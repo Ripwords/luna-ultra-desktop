@@ -1,9 +1,12 @@
-import type { CameraInfo, MediaItem } from "~/types/media";
+import type { CameraInfo, MediaItem, MediaStorage } from "~/types/media";
 import { isTauri } from "~/utils/saveFile";
 import { extractCameraSubdirs, parseLunaIndex } from "~/utils/lunaIndex";
 
 /** Storage roots the Luna Ultra exposes over HTTP, default first. */
-const STORAGE_PATHS = ["/storage_internal/DCIM/", "/DCIM/"];
+const STORAGE_ROOTS: Array<{ path: string; id: MediaStorage }> = [
+  { path: "/storage_internal/DCIM/", id: "internal" },
+  { path: "/DCIM/", id: "sdcard" },
+];
 
 interface RawDeviceInfo {
   host: string;
@@ -77,8 +80,8 @@ export const lunaClient = {
   async listMedia(host: string): Promise<MediaItem[]> {
     const items: MediaItem[] = [];
     const seen = new Set<string>();
-    for (const storage of STORAGE_PATHS) {
-      const rootUrl = baseUrl(host, storage);
+    for (const storage of STORAGE_ROOTS) {
+      const rootUrl = baseUrl(host, storage.path);
       let rootHtml: string;
       try {
         const response = await cameraFetch(rootUrl, { headers: { "Cache-Control": "no-cache" } });
@@ -90,14 +93,14 @@ export const lunaClient = {
 
       const subdirs = extractCameraSubdirs(rootHtml);
       // Some firmwares list files directly at the storage root
-      const listings = subdirs.length > 0 ? subdirs.map((dir) => `${storage}${dir}/`) : [storage];
+      const listings = subdirs.length > 0 ? subdirs.map((dir) => `${storage.path}${dir}/`) : [storage.path];
       for (const listingPath of listings) {
         const url = baseUrl(host, listingPath);
         try {
           const response = await cameraFetch(url, { headers: { "Cache-Control": "no-cache" } });
           if (!response.ok) continue;
           const html = await response.text();
-          for (const item of parseLunaIndex(html, url)) {
+          for (const item of parseLunaIndex(html, url, storage.id)) {
             if (seen.has(item.cameraPath)) continue;
             seen.add(item.cameraPath);
             items.push(item);

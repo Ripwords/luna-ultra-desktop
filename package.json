@@ -25,6 +25,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "nuxt": "^4.5.0",
+    "pannellum": "^2.5.7",
     "tailwindcss": "^4.3.3",
     "three": "^0.185.1"
   },
