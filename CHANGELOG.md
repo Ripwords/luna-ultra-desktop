@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.10...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.10...master)
+
+### 🩹 Fixes
+
+- Faster thumbnail batches, RAW decode hardening, working space toggle ([4146989](https://github.com/Ripwords/luna-ultra-desktop/commit/4146989))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.9...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.9...master)
