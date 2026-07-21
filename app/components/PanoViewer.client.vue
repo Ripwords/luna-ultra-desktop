@@ -36,6 +36,8 @@ onMounted(async () => {
       type: "equirectangular",
       panorama: objectUrl,
       autoLoad: true,
+      draggable: true,
+      mouseZoom: true,
       showZoomCtrl: true,
       showFullscreenCtrl: false,
       compass: false,
@@ -63,7 +65,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative size-full">
+  <!-- WKWebView hijacks mouse-drag for native text/image selection unless
+       these are suppressed, which stops Pannellum from panning. -->
+  <div class="pano-root relative size-full">
     <div ref="container" class="size-full" />
 
     <div v-if="state === 'loading'" class="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -76,3 +80,17 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.pano-root,
+.pano-root :deep(.pnlm-container),
+.pano-root :deep(.pnlm-render-container),
+.pano-root :deep(.pnlm-dragfix),
+.pano-root :deep(canvas) {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+</style>
