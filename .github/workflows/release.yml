@@ -1,7 +1,11 @@
 name: Release
 
 # Build, sign, and publish desktop bundles + the updater manifest whenever a
-# version tag is pushed (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+# version tag is pushed (e.g. `bun run release`, or `git tag v0.1.0 && git push --tags`).
+#
+# One `create-release` job opens a single draft release (with changelogen-generated
+# notes); every platform in the `build` matrix uploads its artifacts to that same
+# release; `publish` flips it from draft to published once all builds succeed.
 on:
   push:
     tags:
@@ -12,7 +16,57 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  create-release:
+    runs-on: ubuntu-22.04
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags so changelogen can diff
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            # First release: start from the very first commit
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD | tail -1)
+          fi
+          echo "Generating notes from ${PREV_TAG} to ${GITHUB_REF_NAME}"
+          NOTES=$(bun x changelogen --no-output --from "${PREV_TAG}" --to "${GITHUB_REF_NAME}")
+          {
+            echo "body<<CHANGELOG_EOF"
+            echo "${NOTES}"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        id: create
+        uses: actions/github-script@v7
+        env:
+          RELEASE_BODY: ${{ steps.notes.outputs.body }}
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: process.env.GITHUB_REF_NAME,
+              name: `Luna Ultra Desktop ${process.env.GITHUB_REF_NAME}`,
+              body: process.env.RELEASE_BODY || 'See the assets below to download and install this version.',
+              draft: true,
+              prerelease: false
+            })
+            return data.id
+
+  build:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -59,17 +113,28 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build and publish
+      - name: Build, sign, and upload
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Luna Ultra Desktop ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download and install this version."
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  publish:
+    needs: [create-release, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish the release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            })

@@ -12,7 +12,9 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "changelog": "changelogen",
+    "release": "bun scripts/release.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.118",
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
     "@types/three": "^0.185.1",
+    "changelogen": "^0.6.2",
     "oxfmt": "^0.59.0",
     "oxlint": "^1.74.0",
     "typescript": "^5.9.0",
