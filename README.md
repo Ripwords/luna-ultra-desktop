@@ -33,6 +33,10 @@ Connect over Wi-Fi to browse the camera's media library, batch-download photos a
 
 ## Screenshots
 
+**Connect & 3D showpiece** — pair the camera and inspect it as a hi-fi 3D model.
+
+![Connect and 3D model](screenshots/01-connect.png)
+
 | Gallery | Multi-select |
 | --- | --- |
 | ![Gallery](screenshots/02-gallery.png) | ![Selection](screenshots/03-selection.png) |
