@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.8...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.8...master)
+
+### 🩹 Fixes
+
+- Download full LRV for video thumbnails so they actually decode ([ea0671f](https://github.com/Ripwords/luna-ultra-desktop/commit/ea0671f))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.7...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.7...master)
