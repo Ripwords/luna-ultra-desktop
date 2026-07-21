@@ -42,6 +42,7 @@ setVersion(lock, /(name = "luna-ultra-desktop"\nversion = )"[^"]+"/, `$1"${versi
 run(`git add package.json CHANGELOG.md ${conf} ${cargo} ${lock}`);
 run(`git commit -m "chore(release): v${version}"`);
 run(`git tag v${version}`);
-run("git push --follow-tags");
+run("git push");
+run(`git push origin v${version}`); // push the tag explicitly (lightweight tags aren't sent by --follow-tags)
 
 console.log(`\nReleased v${version}. GitHub Actions is now building and publishing it.`);
