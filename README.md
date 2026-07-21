@@ -49,6 +49,29 @@ Connect over Wi-Fi to browse the camera's media library, batch-download photos a
 | --- | --- |
 | ![Downloads](screenshots/06-downloads.png) | ![Light theme](screenshots/07-gallery-light.png) |
 
+## Installing
+
+Download the installer for your platform from the [latest release](https://github.com/Ripwords/luna-ultra-desktop/releases/latest).
+
+### macOS — "'Luna Ultra Desktop' is damaged and can't be opened"
+
+The app is signed with an ad-hoc key but is **not** yet notarized by Apple, so macOS Gatekeeper quarantines it on download and shows this message. The app isn't actually damaged. Drag it to **Applications**, then clear the quarantine attribute in Terminal:
+
+```bash
+xattr -cr "/Applications/Luna Ultra Desktop.app"
+```
+
+Then open it normally (or right-click → Open the first time). If you kept the app somewhere other than Applications, point the command at that path instead — for example:
+
+```bash
+xattr -cr ~/Downloads/"Luna Ultra Desktop.app"
+```
+
+- `xattr -cr` clears **all** extended attributes recursively, which removes the `com.apple.quarantine` flag that triggers the error.
+- To remove only the quarantine flag: `xattr -dr com.apple.quarantine "/Applications/Luna Ultra Desktop.app"`.
+
+> The permanent fix is Apple Developer ID signing + notarization (requires a paid Apple Developer account). Once set up, this manual step goes away — see [Releases & auto-updates](#releases--auto-updates).
+
 ## How it connects
 
 The Luna Ultra exposes two services on its Wi-Fi network (default gateway `192.168.42.1`):
