@@ -21,23 +21,32 @@ const emit = defineEmits<{
 const videoEl = ref<HTMLVideoElement | null>(null);
 
 /**
- * Space toggles video play/pause. Registered manually (not defineShortcuts) so
- * we can skip the cases where space already means something: a focused button
- * or the video element itself (native controls handle it there).
+ * Space toggles video play/pause. Captured on window because the modal's focus
+ * trap parks focus on a button, where a bubbling handler would either miss the
+ * event or let space "click" that button instead. We consume both keydown
+ * (toggle) and keyup (so the focused button is never activated), skipping only
+ * genuine text inputs.
  */
-function onKeydown(event: KeyboardEvent) {
-  if (!open.value || event.key !== " ") return;
+function onSpaceKey(event: KeyboardEvent) {
+  if (!open.value || (event.key !== " " && event.code !== "Space")) return;
   const target = event.target as HTMLElement | null;
-  if (target?.closest("button, input, textarea, select, a, video, [role='button']")) return;
+  if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
   const video = videoEl.value;
   if (!video) return;
   event.preventDefault();
+  if (event.type !== "keydown") return;
   if (video.paused) void video.play();
   else video.pause();
 }
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+onMounted(() => {
+  window.addEventListener("keydown", onSpaceKey, true);
+  window.addEventListener("keyup", onSpaceKey, true);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onSpaceKey, true);
+  window.removeEventListener("keyup", onSpaceKey, true);
+});
 
 const takenLabel = computed(() => {
   if (!props.item) return "";
@@ -115,12 +124,16 @@ defineShortcuts({
             prefer="largest"
             img-class="max-h-full max-w-full object-contain"
           >
-            <template #fallback>
+            <template #fallback="{ reason }">
               <div class="flex flex-col items-center gap-3 text-center text-muted">
                 <UIcon name="i-lucide-aperture" class="size-12 text-dimmed" />
                 <div class="space-y-1">
                   <p class="font-mono text-sm uppercase text-highlighted">{{ item.ext }} file</p>
-                  <p class="max-w-xs text-sm">No embedded preview in this RAW file. Download it to open in your photo editor.</p>
+                  <p class="max-w-xs text-sm">
+                    <template v-if="reason === 'network'">The download from the camera failed or was interrupted. Try again or download the file.</template>
+                    <template v-else-if="reason === 'decode-failed'">Downloaded, but rendering this RAW file's preview failed. Download it to open in your photo editor.</template>
+                    <template v-else>No embedded preview in this RAW file. Download it to open in your photo editor.</template>
+                  </p>
                 </div>
                 <UButton label="Download" icon="i-lucide-arrow-down-to-line" color="neutral" variant="outline" @click="emit('download')" />
               </div>

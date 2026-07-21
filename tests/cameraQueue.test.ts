@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
+import { withCameraSlot, CAMERA_PRIORITY, CAMERA_CONCURRENCY } from "~/utils/cameraQueue";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -10,7 +10,7 @@ function deferred<T>() {
 }
 
 describe("withCameraSlot", () => {
-  it("never runs more than 2 transfers concurrently", async () => {
+  it("never exceeds the concurrency cap", async () => {
     let active = 0;
     let peak = 0;
     const task = () =>
@@ -20,19 +20,17 @@ describe("withCameraSlot", () => {
         await new Promise((r) => setTimeout(r, 5));
         active--;
       });
-    await Promise.all(Array.from({ length: 12 }, task));
-    expect(peak).toBeLessThanOrEqual(2);
+    await Promise.all(Array.from({ length: 20 }, task));
+    expect(peak).toBeLessThanOrEqual(CAMERA_CONCURRENCY);
     expect(peak).toBeGreaterThan(0);
   });
 
   it("drains higher priority work first when slots free up", async () => {
     const order: string[] = [];
-    // Occupy both slots with blockers we control.
-    const b1 = deferred<void>();
-    const b2 = deferred<void>();
-    const p1 = withCameraSlot(() => b1.promise);
-    const p2 = withCameraSlot(() => b2.promise);
-    // Queue a low- and a high-priority task while both slots are busy.
+    // Occupy every slot with blockers we control.
+    const blockers = Array.from({ length: CAMERA_CONCURRENCY }, () => deferred<void>());
+    const held = blockers.map((b) => withCameraSlot(() => b.promise));
+    // Queue a low- and a high-priority task while all slots are busy.
     const low = withCameraSlot(async () => {
       order.push("low");
     }, CAMERA_PRIORITY.THUMBNAIL);
@@ -40,9 +38,8 @@ describe("withCameraSlot", () => {
       order.push("high");
     }, CAMERA_PRIORITY.PREVIEW);
     // Free the slots; the higher-priority queued task should run first.
-    b1.resolve();
-    b2.resolve();
-    await Promise.all([p1, p2, low, high]);
+    for (const b of blockers) b.resolve();
+    await Promise.all([...held, low, high]);
     expect(order[0]).toBe("high");
   });
 

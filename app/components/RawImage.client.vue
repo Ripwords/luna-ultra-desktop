@@ -31,6 +31,8 @@ const state = ref<"idle" | "loading" | "loaded" | "nopreview" | "error">("idle")
 const phase = ref<"downloading" | "decoding">("downloading");
 const downloaded = ref(0);
 const total = ref(0);
+/** Which stage failed — surfaced in the fallback UI so failures are diagnosable. */
+const reason = ref<"network" | "range-skipped" | "no-preview" | "decode-failed" | null>(null);
 
 /** Whether this instance shows the full file (full-screen), not a grid thumb. */
 const fullFile = computed(() => !props.maxBytes);
@@ -54,7 +56,10 @@ async function downloadBuffer(response: Response): Promise<ArrayBuffer> {
     const { done, value } = await reader.read();
     if (done) break;
     if (value) {
-      chunks.push(value);
+      // Copy each chunk: if the stream implementation reuses its buffer across
+      // reads, held references would all alias the last chunk's bytes and the
+      // assembled file would be silently corrupt.
+      chunks.push(new Uint8Array(value));
       received += value.length;
       downloaded.value = received;
     }
@@ -75,17 +80,22 @@ async function downloadBuffer(response: Response): Promise<ArrayBuffer> {
  * null when the file isn't a supported raw or the canvas is unavailable.
  */
 function decodeRawToDataUrl(buffer: ArrayBuffer): string | null {
-  const meta = parseRawImageMeta(buffer);
-  if (!meta) return null;
-  const decoded = decodeRawPreview(buffer, meta, 1600);
-  if (!decoded) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = decoded.width;
-  canvas.height = decoded.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.putImageData(new ImageData(decoded.data, decoded.width, decoded.height), 0, 0);
-  return canvas.toDataURL("image/jpeg", 0.9);
+  try {
+    const meta = parseRawImageMeta(buffer);
+    if (!meta) return null;
+    const decoded = decodeRawPreview(buffer, meta, 1600);
+    if (!decoded) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = decoded.width;
+    canvas.height = decoded.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.putImageData(new ImageData(decoded.data, decoded.width, decoded.height), 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } catch {
+    // An allocation or canvas failure must read as decode-failed, not no-preview.
+    return null;
+  }
 }
 
 async function load() {
@@ -111,6 +121,7 @@ async function load() {
     }, priority);
 
     if (buffer === null) {
+      reason.value = "range-skipped";
       state.value = "nopreview";
       return;
     }
@@ -134,10 +145,15 @@ async function load() {
         state.value = "loaded";
         return;
       }
+      reason.value = "decode-failed";
+      state.value = "nopreview";
+      return;
     }
 
+    reason.value = "no-preview";
     state.value = "nopreview";
   } catch {
+    reason.value = "network";
     state.value = "error";
   }
 }
@@ -171,7 +187,7 @@ onBeforeUnmount(() => {
   <div ref="el" class="relative size-full">
     <img v-if="state === 'loaded' && imgSrc" :src="imgSrc" alt="" draggable="false" :class="imgClass" />
 
-    <slot v-else-if="state === 'nopreview' || state === 'error'" name="fallback" :ext="ext">
+    <slot v-else-if="state === 'nopreview' || state === 'error'" name="fallback" :ext="ext" :reason="reason">
       <div class="flex size-full flex-col items-center justify-center gap-1.5 bg-elevated text-dimmed">
         <UIcon name="i-lucide-aperture" class="size-6" />
         <span class="font-mono text-[10px] uppercase tracking-wide">{{ ext }}</span>

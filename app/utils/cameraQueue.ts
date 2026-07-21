@@ -16,7 +16,12 @@
  */
 export const CAMERA_PRIORITY = { THUMBNAIL: 0, LISTING: 1, PREVIEW: 2 } as const;
 
-const CONCURRENCY = 2;
+/**
+ * Max concurrent camera transfers. The reference app uses 2; on-device testing
+ * showed 2 loads the grid noticeably slowly while the Luna copes with more, so
+ * we run 4. If media starts failing en masse again, lower this first.
+ */
+export const CAMERA_CONCURRENCY = 4;
 
 interface QueuedTask {
   priority: number;
@@ -29,7 +34,7 @@ let active = 0;
 const queue: QueuedTask[] = [];
 
 function drain(): void {
-  while (active < CONCURRENCY && queue.length > 0) {
+  while (active < CAMERA_CONCURRENCY && queue.length > 0) {
     let best = 0;
     for (let i = 1; i < queue.length; i++) {
       if (queue[i]!.priority > queue[best]!.priority) best = i;
