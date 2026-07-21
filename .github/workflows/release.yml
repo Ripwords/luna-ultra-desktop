@@ -40,7 +40,11 @@ jobs:
             PREV_TAG=$(git rev-list --max-parents=0 HEAD | tail -1)
           fi
           echo "Generating notes from ${PREV_TAG} to ${GITHUB_REF_NAME}"
-          NOTES=$(bun x changelogen --no-output --from "${PREV_TAG}" --to "${GITHUB_REF_NAME}")
+          # Write to a file (stdout carries consola's [log] prefix in CI), then
+          # drop the redundant "## <from>...<to>" heading and leading blank lines.
+          bun x changelogen --output RELEASE_NOTES.md --from "${PREV_TAG}" --to "${GITHUB_REF_NAME}"
+          NOTES=$(sed '/^## /d' RELEASE_NOTES.md | sed '/./,$!d')
+          rm -f RELEASE_NOTES.md
           {
             echo "body<<CHANGELOG_EOF"
             echo "${NOTES}"
