@@ -1,8 +1,18 @@
-# Luna Ultra Desktop
+<p align="center">
+  <img src="app-icon.png" alt="Luna Ultra Desktop" width="160" height="160" />
+</p>
 
-A desktop companion for the **Insta360 Luna Ultra** camera. Connect over Wi-Fi to browse the camera's media library, batch-download photos and videos with the official Luna Ultra watermark, delete files, and explore the camera as an interactive 3D model.
+<h1 align="center">Luna Ultra Desktop</h1>
 
-Built with [Tauri 2](https://v2.tauri.app/), [Nuxt 4](https://nuxt.com/), [Nuxt UI](https://ui.nuxt.com/), and [Three.js](https://threejs.org/). Ships as a native desktop app for macOS, Windows, and Linux with signed auto-updates.
+<p align="center">
+  A desktop companion for the <strong>Insta360 Luna Ultra</strong> camera.
+</p>
+
+<p align="center">
+  Built with <a href="https://v2.tauri.app/">Tauri 2</a> · <a href="https://nuxt.com/">Nuxt 4</a> · <a href="https://ui.nuxt.com/">Nuxt UI</a> · <a href="https://threejs.org/">Three.js</a>
+</p>
+
+Connect over Wi-Fi to browse the camera's media library, batch-download photos and videos with the official Luna Ultra watermark, delete files, and explore the camera as an interactive 3D model. Ships as a native desktop app for macOS, Windows, and Linux with signed auto-updates.
 
 <p align="center">
   <img src="screenshots/02-gallery.png" alt="Gallery" width="49%" />
