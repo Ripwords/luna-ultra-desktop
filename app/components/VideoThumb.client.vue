@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { cameraFetch } from "~/utils/lunaClient";
-import { videoMimeFor } from "~/utils/media";
 import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
 
 /**
- * Video thumbnail: a <video> seeked to its first frame. The camera's plain-HTTP
- * host can't be used as a direct <video src> in the packaged app (same reason
- * photos go through the Tauri HTTP bridge), and seeking over the network stalls
- * silently on WebKit — the tile stays grey forever. So we pull the thumbnail
- * source through the bridge and seek a *local* blob, which is reliable.
+ * Video thumbnail: a real <video> element on the camera's HTTP URL, seeked to
+ * its first frame. Direct network src is the approach that actually decodes in
+ * the packaged WKWebView — blob: URLs work for <img> but WKWebView's media
+ * stack fails to play <video src="blob:..."> (verified on-device: photos as
+ * blobs render, videos as blobs error, while the full-screen player's direct
+ * http src plays fine).
  *
- * Sources are tried in order: the small LRV proxy (cheap), then a bounded
- * prefix of the full file. If none yields a frame we show a placeholder rather
- * than download a multi-hundred-MB video for a thumbnail.
+ * The camera's embedded HTTP server can't take a whole grid loading at once,
+ * so each tile holds one of the shared camera slots while its <video> fetches
+ * metadata + first frame, releasing it on first-frame/error/stall. Tries the
+ * low-res LRV proxy first, then the full file.
  */
 const props = withDefaults(
   defineProps<{
@@ -28,26 +28,19 @@ const props = withDefaults(
 
 const el = ref<HTMLElement | null>(null);
 const video = ref<HTMLVideoElement | null>(null);
-const objectUrl = ref<string | null>(null);
+const activeSrc = ref<string | null>(null);
 const state = ref<"idle" | "loading" | "loaded" | "error">("idle");
 
 let observer: IntersectionObserver | null = null;
 let stallTimer: ReturnType<typeof setTimeout> | null = null;
-let controller: AbortController | null = null;
+let releaseSlot: (() => void) | null = null;
+let disposed = false;
 let attempt = 0;
 
-/**
- * Ordered thumbnail sources. The small LRV proxy is downloaded in FULL — a
- * partial file has no complete moov/mdat and won't decode in <video>, and the
- * concurrency limiter (not byte bounds) is what protects the camera from
- * overload. The full-resolution file is a last resort, byte-bounded so we never
- * pull a multi-hundred-MB clip; it only decodes for a fast-start MP4 whose moov
- * + first frame sit near the head.
- */
 const sources = computed(() => {
-  const list: Array<{ url: string; maxBytes?: number }> = [];
-  if (props.lrv && props.lrv !== props.src) list.push({ url: props.lrv });
-  list.push({ url: props.src, maxBytes: 3_000_000 });
+  const list: string[] = [];
+  if (props.lrv && props.lrv !== props.src) list.push(props.lrv);
+  list.push(props.src);
   return list;
 });
 
@@ -58,74 +51,47 @@ function clearStall() {
   }
 }
 
-function armStall() {
+/** Free the shared camera slot this tile is holding, if any. */
+function settle() {
   clearStall();
-  // Backstop for a silent hang: covers download + decode. Generous because a
-  // full LRV over the camera Wi-Fi is legitimately slow; a real hang still
-  // resolves to the next source / placeholder rather than staying grey.
-  stallTimer = setTimeout(() => {
-    if (state.value !== "loaded") nextAttempt();
-  }, 30_000);
+  releaseSlot?.();
+  releaseSlot = null;
 }
 
-function revoke() {
-  if (objectUrl.value) {
-    URL.revokeObjectURL(objectUrl.value);
-    objectUrl.value = null;
-  }
-}
-
-async function tryAttempt() {
+function queueAttempt() {
   const source = sources.value[attempt];
   if (!source) {
-    revoke();
-    clearStall();
     state.value = "error";
     return;
   }
-  const token = attempt;
-  const signal = controller?.signal;
-  armStall();
-  try {
-    // Thumbnails share the limited camera slots at the lowest priority so they
-    // never starve an opened preview or the photo tiles.
-    const blob = await withCameraSlot(async () => {
-      const init: RequestInit = { signal };
-      if (source.maxBytes) init.headers = { Range: `bytes=0-${source.maxBytes - 1}` };
-      const response = await cameraFetch(source.url, init);
-      if (!response.ok && response.status !== 206) throw new Error(String(response.status));
-      // Bounded source but the camera ignored Range and would send the whole
-      // multi-hundred-MB clip: bail rather than pull it for a thumbnail.
-      if (source.maxBytes && response.status !== 206) {
-        const len = Number(response.headers.get("content-length") ?? 0);
-        if (len === 0 || len > source.maxBytes * 2) throw new Error("range-ignored");
-      }
-      const raw = await response.blob();
-      const mime = videoMimeFor(source.url);
-      return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
-    }, CAMERA_PRIORITY.THUMBNAIL);
-    if (token !== attempt) return; // superseded by a newer attempt
-    revoke();
-    objectUrl.value = URL.createObjectURL(blob);
-  } catch {
-    if (token === attempt) nextAttempt();
-  }
-}
-
-function nextAttempt() {
-  controller?.abort(); // free the camera slot if the previous fetch is still running
-  controller = new AbortController();
-  attempt++;
-  state.value = "loading";
-  void tryAttempt();
+  // Hold a camera slot while the <video> fetches metadata + first frame, so a
+  // screenful of tiles loads a couple at a time instead of all at once. The
+  // slot is released by onReady/onError/stall, not by the media element.
+  void withCameraSlot(
+    () =>
+      new Promise<void>((resolve) => {
+        if (disposed) {
+          resolve();
+          return;
+        }
+        releaseSlot = resolve;
+        activeSrc.value = source;
+        clearStall();
+        // If WebKit silently never fires loadeddata/seeked/error (e.g. a
+        // moov-at-end file), give up the slot and fall to the next source.
+        stallTimer = setTimeout(() => {
+          if (state.value !== "loaded") onError();
+        }, 15_000);
+      }),
+    CAMERA_PRIORITY.THUMBNAIL,
+  );
 }
 
 function begin() {
   if (state.value !== "idle") return;
   state.value = "loading";
   attempt = 0;
-  controller = new AbortController();
-  void tryAttempt();
+  queueAttempt();
 }
 
 function onMeta() {
@@ -140,15 +106,18 @@ function onMeta() {
 }
 
 function onReady() {
-  clearStall();
+  settle();
   state.value = "loaded";
 }
 
 function onError() {
-  nextAttempt();
+  settle();
+  attempt++;
+  queueAttempt();
 }
 
 onMounted(async () => {
+  // .client components bind their template ref a tick late
   await nextTick();
   if (props.eager || !("IntersectionObserver" in window) || !el.value) {
     begin();
@@ -167,20 +136,19 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   observer?.disconnect();
-  clearStall();
-  controller?.abort();
-  revoke();
+  settle();
 });
 </script>
 
 <template>
   <div ref="el" class="relative size-full">
     <video
-      v-if="objectUrl"
+      v-if="activeSrc"
       ref="video"
-      :key="objectUrl"
-      :src="objectUrl"
+      :key="activeSrc"
+      :src="activeSrc"
       muted
       playsinline
       preload="metadata"

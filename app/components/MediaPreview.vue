@@ -18,6 +18,27 @@ const emit = defineEmits<{
   loaded: [dimensions: { width: number; height: number }];
 }>();
 
+const videoEl = ref<HTMLVideoElement | null>(null);
+
+/**
+ * Space toggles video play/pause. Registered manually (not defineShortcuts) so
+ * we can skip the cases where space already means something: a focused button
+ * or the video element itself (native controls handle it there).
+ */
+function onKeydown(event: KeyboardEvent) {
+  if (!open.value || event.key !== " ") return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("button, input, textarea, select, a, video, [role='button']")) return;
+  const video = videoEl.value;
+  if (!video) return;
+  event.preventDefault();
+  if (video.paused) void video.play();
+  else video.pause();
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+
 const takenLabel = computed(() => {
   if (!props.item) return "";
   return new Date(props.item.takenAt).toLocaleString("en-US", {
@@ -63,6 +84,7 @@ defineShortcuts({
                be hundreds of MB and is meant for download, not preview. -->
           <video
             v-if="item.type === 'video'"
+            ref="videoEl"
             :key="item.id"
             :src="item.lrvUrl ?? item.srcUrl"
             controls
