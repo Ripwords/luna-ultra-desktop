@@ -12,6 +12,16 @@
   Built with <a href="https://v2.tauri.app/">Tauri 2</a> · <a href="https://nuxt.com/">Nuxt 4</a> · <a href="https://ui.nuxt.com/">Nuxt UI</a> · <a href="https://threejs.org/">Three.js</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/Ripwords/luna-ultra-desktop/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/Ripwords/luna-ultra-desktop/releases/latest"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows11&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/Ripwords/luna-ultra-desktop/releases/latest"><img src="https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ripwords/luna-ultra-desktop/releases/latest"><img src="https://img.shields.io/github/v/release/Ripwords/luna-ultra-desktop?style=flat-square&label=latest&color=555" alt="Latest release" /></a>
+</p>
+
 Connect over Wi-Fi to browse the camera's media library, batch-download photos and videos with the official Luna Ultra watermark, delete files, and explore the camera as an interactive 3D model. Ships as a native desktop app for macOS, Windows, and Linux with signed auto-updates.
 
 <p align="center">
