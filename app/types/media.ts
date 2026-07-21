@@ -1,0 +1,45 @@
+export type MediaType = "photo" | "video";
+
+export interface MediaItem {
+  /** Absolute path on camera storage; unique id */
+  id: string;
+  name: string;
+  type: MediaType;
+  /** Unix epoch ms of capture time (filename timestamp, else index column) */
+  takenAt: number;
+  /** File size in bytes, parsed from the camera's index listing */
+  size: number;
+  /** Pixel dimensions are unknown until the file is decoded */
+  width?: number;
+  height?: number;
+  /** Video duration in seconds when known */
+  duration?: number;
+  /** Absolute path on the camera, used for TCP delete commands */
+  cameraPath: string;
+  srcUrl: string;
+  /** Low-res LRV proxy URL for videos and live photos, when the camera provides one */
+  lrvUrl?: string;
+}
+
+export type CameraStatus = "disconnected" | "connecting" | "connected";
+
+export interface CameraInfo {
+  host: string;
+  deviceName?: string;
+  serial?: string;
+  firmware?: string;
+  ssid?: string;
+}
+
+export type DownloadStatus = "queued" | "downloading" | "done" | "error";
+
+export interface DownloadEntry {
+  id: string;
+  item: MediaItem;
+  status: DownloadStatus;
+  progress: number;
+  watermarked: boolean;
+  savedTo?: string;
+  error?: string;
+  startedAt: number;
+}

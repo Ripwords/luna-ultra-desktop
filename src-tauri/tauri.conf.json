@@ -1,0 +1,52 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Luna Ultra Desktop",
+  "mainBinaryName": "Luna Ultra Desktop",
+  "version": "0.1.0",
+  "identifier": "com.lunaultra.desktop",
+  "build": {
+    "frontendDist": "../.output/public",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun run ui:dev",
+    "beforeBuildCommand": "bun run generate"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Luna Ultra",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/OWNER/luna-ultra-desktop/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5RjFGMkNBMjUwQjhDMjYKUldRbWpBc2x5dkx4ZVlXdU8rQm84Zkc1UThSWnlGcmY0TGJHd1V2a0ZEU3JvL0V0R2VLbzl3OFAK"
+    }
+  }
+}

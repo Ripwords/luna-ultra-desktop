@@ -1,0 +1,28 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+.codegraph
+
+# Tauri updater signing key (never commit the private key)
+*.key
+
+# Local env files
+.env
+.env.*
+!.env.example

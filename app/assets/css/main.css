@@ -1,0 +1,25 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+/*
+ * Luna Ultra colorways: Arctic White (light) and Midnight Black (dark).
+ * Primary is monochrome by design: near-black on light, off-white on dark.
+ */
+:root {
+  --ui-radius: 0.5rem;
+  --ui-primary: var(--ui-color-neutral-950);
+}
+
+.dark {
+  --ui-primary: var(--ui-color-neutral-50);
+}
+
+::selection {
+  background: var(--ui-primary);
+  color: var(--ui-bg);
+}
