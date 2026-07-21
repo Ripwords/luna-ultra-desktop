@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.5...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.5...master)
+
+### 🩹 Fixes
+
+- Robust RAW decode, Escape to close preview, video thumb stall guard ([33d83bf](https://github.com/Ripwords/luna-ultra-desktop/commit/33d83bf))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.4...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.4...master)
