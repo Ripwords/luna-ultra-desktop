@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v0.1.4...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.4...master)
+
+### 🩹 Fixes
+
+- Stream DNG download with progress; exclude 200MP stitched pano ([b0bd4f8](https://github.com/Ripwords/luna-ultra-desktop/commit/b0bd4f8))
+
+### 📖 Documentation
+
+- **changelog:** Tidy v0.1.4 section ([aa802de](https://github.com/Ripwords/luna-ultra-desktop/commit/aa802de))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.4
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.2...v0.1.4)
