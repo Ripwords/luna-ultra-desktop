@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.9...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.9...master)
+
+### 🩹 Fixes
+
+- Restore direct-src video thumbnails; space toggles playback ([9f6b4a4](https://github.com/Ripwords/luna-ultra-desktop/commit/9f6b4a4))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.8...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.8...master)

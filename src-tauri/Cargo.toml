@@ -1,6 +1,6 @@
 [package]
 name = "luna-ultra-desktop"
-version = "0.1.9"
+version = "0.1.10"
 description = "Luna Ultra desktop companion"
 authors = ["you"]
 license = ""
