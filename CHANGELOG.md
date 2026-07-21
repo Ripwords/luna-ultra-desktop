@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.7...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.7...master)
+
+### 🩹 Fixes
+
+- Cap camera HTTP concurrency to stop saturating the camera ([eb4b9b1](https://github.com/Ripwords/luna-ultra-desktop/commit/eb4b9b1))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.6...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.6...master)
