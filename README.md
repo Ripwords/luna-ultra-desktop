@@ -72,6 +72,26 @@ xattr -cr ~/Downloads/"Luna Ultra Desktop.app"
 
 > The permanent fix is Apple Developer ID signing + notarization (requires a paid Apple Developer account). Once set up, this manual step goes away — see [Releases & auto-updates](#releases--auto-updates).
 
+**macOS local-network permission.** Connecting to the camera at `192.168.42.1` requires macOS's Local Network permission. Allow **Luna Ultra Desktop** the first time it prompts, or enable it under **System Settings › Privacy & Security › Local Network**.
+
+### Windows — "Windows protected your PC" (SmartScreen)
+
+The app isn't signed with a Windows code-signing certificate, so Microsoft Defender SmartScreen warns on first launch. Click **More info → Run anyway**. The MSI installer also shows a standard UAC elevation prompt. No firewall permission is needed — Windows allows the app's outbound connection to the camera automatically (there is no per-app local-network permission like macOS).
+
+### Linux
+
+- **AppImage**: make it executable and run it. Some distributions need FUSE — on Ubuntu 22.04+ install it with `sudo apt install libfuse2`.
+
+  ```bash
+  chmod +x "Luna Ultra Desktop_0.1.0_amd64.AppImage"
+  ./"Luna Ultra Desktop_0.1.0_amd64.AppImage"
+  ```
+
+- **.deb / .rpm**: install with your package manager (`sudo apt install ./*.deb` or `sudo dnf install ./*.rpm`).
+- No local-network permission is required to reach the camera.
+
+> Auto-updates apply to the **AppImage** build only. If you installed the `.deb` or `.rpm`, download new releases manually.
+
 ## How it connects
 
 The Luna Ultra exposes two services on its Wi-Fi network (default gateway `192.168.42.1`):
