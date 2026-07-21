@@ -16,15 +16,6 @@ function onTileClick(event: MouseEvent) {
   if (props.selectionActive || event.shiftKey) emit("select", event);
   else emit("open");
 }
-
-/**
- * Thumbnails come from the camera's low-res LRV proxy when one exists.
- * Photos without a proxy fall back to the full-res file; videos without one
- * get a static placeholder instead of streaming the full-size video.
- */
-const previewSrc = computed(() =>
-  props.item.lrvUrl ?? (props.item.type === "photo" ? props.item.srcUrl : null),
-);
 </script>
 
 <template>
@@ -39,16 +30,20 @@ const previewSrc = computed(() =>
     @keydown.enter.prevent="emit('open')"
     @keydown.space.prevent="emit('select', $event as unknown as MouseEvent)"
   >
+    <VideoThumb
+      v-if="item.type === 'video'"
+      :src="item.srcUrl"
+      :lrv="item.lrvUrl"
+      img-class="size-full object-cover transition-transform duration-300"
+      :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
+    />
     <CameraImage
-      v-if="previewSrc"
-      :src="previewSrc"
+      v-else
+      :src="item.srcUrl"
       :alt="item.name"
       img-class="size-full object-cover transition-transform duration-300"
       :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
     />
-    <div v-else class="flex size-full items-center justify-center bg-elevated">
-      <UIcon name="i-lucide-film" class="size-5 text-dimmed" />
-    </div>
 
     <button
       type="button"

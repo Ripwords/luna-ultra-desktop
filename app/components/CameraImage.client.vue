@@ -22,43 +22,6 @@ const state = ref<"idle" | "loading" | "loaded" | "error">("idle");
 
 let observer: IntersectionObserver | null = null;
 
-function isVideoSource(url: string, blobType: string): boolean {
-  if (blobType.startsWith("video/")) return true;
-  return /\.(lrv|mp4|mov)$/.test(url.split("?")[0]!.toLowerCase());
-}
-
-/** Decode the first frame of a video blob (e.g. an LRV proxy) into a JPEG. */
-async function extractPosterFrame(blob: Blob): Promise<Blob> {
-  const videoUrl = URL.createObjectURL(blob);
-  const video = document.createElement("video");
-  try {
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "auto";
-    video.src = videoUrl;
-    await new Promise<void>((resolve, reject) => {
-      video.addEventListener("loadeddata", () => resolve(), { once: true });
-      video.addEventListener("error", () => reject(new Error("undecodable video")), { once: true });
-    });
-    // Some decoders only paint after an explicit seek off frame zero
-    video.currentTime = Math.min(0.1, video.duration || 0.1);
-    await new Promise<void>((resolve) => {
-      video.addEventListener("seeked", () => resolve(), { once: true });
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    const poster = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
-    if (!poster) throw new Error("frame capture failed");
-    return poster;
-  } finally {
-    video.removeAttribute("src");
-    video.load();
-    URL.revokeObjectURL(videoUrl);
-  }
-}
-
 async function load() {
   if (state.value !== "idle") return;
   state.value = "loading";
@@ -66,8 +29,7 @@ async function load() {
     const response = await cameraFetch(props.src);
     if (!response.ok) throw new Error(String(response.status));
     const blob = await response.blob();
-    const display = isVideoSource(props.src, blob.type) ? await extractPosterFrame(blob) : blob;
-    objectUrl.value = URL.createObjectURL(display);
+    objectUrl.value = URL.createObjectURL(blob);
     state.value = "loaded";
   } catch {
     state.value = "error";

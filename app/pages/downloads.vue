@@ -51,8 +51,15 @@ const hasFinished = computed(() => queue.value.some((entry) => entry.status === 
           class="flex items-center gap-4 rounded-xl border border-default bg-elevated/40 p-3"
         >
           <div class="size-14 shrink-0 overflow-hidden rounded-lg bg-muted">
+            <VideoThumb
+              v-if="entry.item.type === 'video'"
+              :src="entry.item.srcUrl"
+              :lrv="entry.item.lrvUrl"
+              img-class="size-full object-cover"
+            />
             <CameraImage
-              :src="entry.item.type === 'video' && entry.item.lrvUrl ? entry.item.lrvUrl : entry.item.srcUrl"
+              v-else
+              :src="entry.item.srcUrl"
               :alt="entry.item.name"
               img-class="size-full object-cover"
             />
