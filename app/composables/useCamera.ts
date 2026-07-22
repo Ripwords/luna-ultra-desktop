@@ -3,6 +3,7 @@ import { lunaClient } from "~/utils/lunaClient";
 import { armCameraHealth, disarmCameraHealth, FAILURE_THRESHOLD } from "~/utils/cameraHealth";
 
 const DEFAULT_HOST = "192.168.42.1";
+const HOST_STORAGE_KEY = "luna-camera-host";
 
 /** Reconnect backoff schedule; the last delay repeats until reconnected. */
 const RETRY_DELAYS_MS = [1000, 2000, 5000, 10000, 15000];
@@ -14,12 +15,26 @@ export function useCamera() {
   const status = useState<CameraStatus>("camera-status", () => "disconnected");
   const info = useState<CameraInfo | null>("camera-info", () => null);
   const library = useState<MediaItem[]>("camera-library", () => []);
-  const host = useState<string>("camera-host", () => DEFAULT_HOST);
+  const host = useState<string>("camera-host", () => {
+    if (import.meta.client) {
+      const stored = localStorage.getItem(HOST_STORAGE_KEY);
+      if (stored) return stored;
+    }
+    return DEFAULT_HOST;
+  });
   const error = useState<string | null>("camera-error", () => null);
   const loadingLibrary = useState<boolean>("camera-library-loading", () => false);
   /** True from a successful manual connect until a manual disconnect */
   const wantConnection = useState<boolean>("camera-want-connection", () => false);
   const retryAttempt = useState<number>("camera-retry-attempt", () => 0);
+
+  // Persisted so the home page can ship a bare Connect button: a user on a
+  // non-default gateway should not have to retype it every launch.
+  if (import.meta.client) {
+    watch(host, (value) => {
+      localStorage.setItem(HOST_STORAGE_KEY, value.trim());
+    });
+  }
 
   const isConnected = computed(() => status.value === "connected");
   const isBusy = computed(() => status.value === "connecting");
