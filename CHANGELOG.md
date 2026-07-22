@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.11...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.11...master)
+
+### 🚀 Enhancements
+
+- Sibling-JPG thumbnails for RAW+JPEG pairs; retry RAW downloads ([65cf719](https://github.com/Ripwords/luna-ultra-desktop/commit/65cf719))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.10...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.10...master)
