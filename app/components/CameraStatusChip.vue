@@ -23,7 +23,7 @@ const tooltip = computed(() => (info.value ? (info.value.ssid ?? info.value.host
       to="/settings"
       class="block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       :class="collapsed ? '' : 'w-full'"
-      aria-label="Camera settings"
+      :aria-label="`Camera ${meta.label.toLowerCase()}. Open settings`"
     >
       <UBadge :color="meta.color" variant="subtle" size="md" :class="collapsed ? 'px-1.5' : 'w-full justify-start'">
         <UIcon :name="meta.icon" class="size-3.5 shrink-0" :class="meta.spin ? 'animate-spin' : ''" />
