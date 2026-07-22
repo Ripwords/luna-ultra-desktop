@@ -1,6 +1,7 @@
 import type { CameraInfo, MediaItem, MediaStorage } from "~/types/media";
 import { isTauri } from "~/utils/saveFile";
 import { extractCameraSubdirs, parseLunaIndex } from "~/utils/lunaIndex";
+import { reportCameraFailure, reportCameraSuccess } from "~/utils/cameraHealth";
 
 /** Storage roots the Luna Ultra exposes over HTTP, default first. */
 const STORAGE_ROOTS: Array<{ path: string; id: MediaStorage }> = [
@@ -29,13 +30,46 @@ async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): 
   return invoke<T>(command, args);
 }
 
-/** Fetch a camera URL. Uses the Tauri HTTP plugin (bypasses CORS/mixed-content) when packaged. */
+/**
+ * Fetch a camera URL. Uses the Tauri HTTP plugin (bypasses CORS/mixed-content)
+ * when packaged. Every camera request flows through here, so this is also
+ * where the health counter is fed: a completed response of any status means
+ * the camera answered, a thrown request means it did not.
+ */
 export async function cameraFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    const response = await rawCameraFetch(url, init);
+    reportCameraSuccess();
+    return response;
+  } catch (error) {
+    reportCameraFailure();
+    throw error;
+  }
+}
+
+/** The transport on its own, with no health reporting attached. */
+async function rawCameraFetch(url: string, init?: RequestInit): Promise<Response> {
   if (isTauri()) {
     const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
     return tauriFetch(url, init);
   }
   return fetch(url, init);
+}
+
+/**
+ * Cheap liveness check used by the health detector: ask for the storage root
+ * listing and treat any completed response, whatever the status, as proof the
+ * camera answered. Deliberately bypasses `cameraFetch` so the probe cannot
+ * feed the very counter that triggered it.
+ */
+export async function probeCamera(host: string): Promise<boolean> {
+  const root = STORAGE_ROOTS[0]!;
+  try {
+    await rawCameraFetch(baseUrl(host, root.path), { headers: { "Cache-Control": "no-cache" } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function toInfo(raw: RawDeviceInfo): CameraInfo {

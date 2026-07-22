@@ -1,7 +1,9 @@
 import type { CameraInfo, CameraStatus, MediaItem } from "~/types/media";
-import { lunaClient } from "~/utils/lunaClient";
+import { lunaClient, probeCamera } from "~/utils/lunaClient";
+import { armCameraHealth, disarmCameraHealth, FAILURE_THRESHOLD } from "~/utils/cameraHealth";
 
 const DEFAULT_HOST = "192.168.42.1";
+const HOST_STORAGE_KEY = "luna-camera-host";
 
 /** Reconnect backoff schedule; the last delay repeats until reconnected. */
 const RETRY_DELAYS_MS = [1000, 2000, 5000, 10000, 15000];
@@ -13,12 +15,28 @@ export function useCamera() {
   const status = useState<CameraStatus>("camera-status", () => "disconnected");
   const info = useState<CameraInfo | null>("camera-info", () => null);
   const library = useState<MediaItem[]>("camera-library", () => []);
-  const host = useState<string>("camera-host", () => DEFAULT_HOST);
+  const host = useState<string>("camera-host", () => {
+    if (import.meta.client) {
+      // Trim on read as well as on write: a blank stored value is treated as
+      // absent so it falls back to the default instead of an empty address.
+      const stored = localStorage.getItem(HOST_STORAGE_KEY)?.trim();
+      if (stored) return stored;
+    }
+    return DEFAULT_HOST;
+  });
   const error = useState<string | null>("camera-error", () => null);
   const loadingLibrary = useState<boolean>("camera-library-loading", () => false);
   /** True from a successful manual connect until a manual disconnect */
   const wantConnection = useState<boolean>("camera-want-connection", () => false);
   const retryAttempt = useState<number>("camera-retry-attempt", () => 0);
+
+  // Persisted so the home page can ship a bare Connect button: a user on a
+  // non-default gateway should not have to retype it every launch.
+  if (import.meta.client) {
+    watch(host, (value) => {
+      localStorage.setItem(HOST_STORAGE_KEY, value.trim());
+    });
+  }
 
   const isConnected = computed(() => status.value === "connected");
   const isBusy = computed(() => status.value === "connecting");
@@ -41,6 +59,12 @@ export function useCamera() {
       status.value = "connected";
       error.value = null;
       retryAttempt.value = 0;
+      armCameraHealth(
+        () => {
+          void forceDisconnect();
+        },
+        () => probeCamera(host.value),
+      );
       await refreshLibrary();
     } catch {
       status.value = "disconnected";
@@ -79,6 +103,11 @@ export function useCamera() {
       library.value = [];
       error.value = "Lost connection to the camera. Reconnecting…";
       retryAttempt.value = 0;
+      // This is a known socket close, not a silently-unresponsive camera: disarm the
+      // health detector so its failure count can't race scheduleReconnect() below and
+      // trigger forceDisconnect(), which would cancel this reconnect. It re-arms itself
+      // once tryReconnect() succeeds again.
+      disarmCameraHealth();
       scheduleReconnect();
     });
   }
@@ -111,6 +140,12 @@ export function useCamera() {
       status.value = "connected";
       // Auto-reconnect only after a session the user established succeeds
       wantConnection.value = true;
+      armCameraHealth(
+        () => {
+          void forceDisconnect();
+        },
+        () => probeCamera(host.value),
+      );
       retryAttempt.value = 0;
       await refreshLibrary();
     } catch (e) {
@@ -120,14 +155,34 @@ export function useCamera() {
     }
   }
 
-  async function disconnect() {
-    wantConnection.value = false;
+  /**
+   * Tear down the session without touching `wantConnection`. Shared by the
+   * user-initiated disconnect and the health-detector disconnect.
+   */
+  async function teardown() {
     clearRetryTimer();
+    disarmCameraHealth();
     await lunaClient.disconnect();
     status.value = "disconnected";
     info.value = null;
     library.value = [];
+  }
+
+  async function disconnect() {
+    wantConnection.value = false;
+    await teardown();
     error.value = null;
+  }
+
+  /**
+   * The camera stopped answering. Drop the session and leave it dropped:
+   * clearing `wantConnection` keeps the backoff reconnect loop dormant so it
+   * cannot immediately undo this. The user reconnects deliberately.
+   */
+  async function forceDisconnect() {
+    wantConnection.value = false;
+    await teardown();
+    error.value = `Lost contact with the camera. Disconnected after ${FAILURE_THRESHOLD} failed requests and a failed health check.`;
   }
 
   /** Remove items locally after the camera confirms deletion. */

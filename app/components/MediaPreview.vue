@@ -59,15 +59,31 @@ const takenLabel = computed(() => {
   });
 });
 
+const moreItems = computed(() => [
+  [
+    {
+      label: "Delete from camera",
+      icon: "i-lucide-trash-2",
+      color: "error" as const,
+      onSelect: () => emit("delete"),
+    },
+  ],
+]);
+
+// While the overflow menu is open it owns the keyboard: Escape should close
+// the menu, not the whole preview, and the arrows should not navigate files
+// underneath it.
+const moreOpen = ref(false);
+
 defineShortcuts({
   arrowleft: () => {
-    if (open.value) emit("prev");
+    if (open.value && !moreOpen.value) emit("prev");
   },
   arrowright: () => {
-    if (open.value) emit("next");
+    if (open.value && !moreOpen.value) emit("next");
   },
   escape: () => {
-    if (open.value) open.value = false;
+    if (open.value && !moreOpen.value) open.value = false;
   },
 });
 </script>
@@ -83,12 +99,15 @@ defineShortcuts({
           </div>
           <div class="flex items-center gap-1.5">
             <UButton icon="i-lucide-arrow-down-to-line" label="Download" size="sm" color="neutral" variant="outline" @click="emit('download')" />
-            <UButton icon="i-lucide-trash-2" size="sm" color="error" variant="ghost" aria-label="Delete file" @click="emit('delete')" />
+            <UDropdownMenu v-model:open="moreOpen" :items="moreItems">
+              <UButton icon="i-lucide-ellipsis" size="sm" color="neutral" variant="ghost" aria-label="More actions" />
+            </UDropdownMenu>
+            <span class="mx-1 h-5 w-px bg-default" aria-hidden="true" />
             <UButton icon="i-lucide-x" size="sm" color="neutral" variant="ghost" aria-label="Close preview" @click="open = false" />
           </div>
         </div>
 
-        <div class="relative flex min-h-0 flex-1 items-center justify-center bg-black/95 dark:bg-black">
+        <div class="relative flex min-h-0 flex-1 items-center justify-center bg-black/95 px-16 dark:bg-black">
           <!-- Play the low-res LRV proxy when available; the full-res file can
                be hundreds of MB and is meant for download, not preview. -->
           <video
@@ -146,7 +165,7 @@ defineShortcuts({
             size="lg"
             color="neutral"
             variant="solid"
-            class="absolute left-4 top-1/2 -translate-y-1/2"
+            class="absolute left-3 top-1/2 -translate-y-1/2"
             aria-label="Previous file"
             @click="emit('prev')"
           />
@@ -156,7 +175,7 @@ defineShortcuts({
             size="lg"
             color="neutral"
             variant="solid"
-            class="absolute right-4 top-1/2 -translate-y-1/2"
+            class="absolute right-3 top-1/2 -translate-y-1/2"
             aria-label="Next file"
             @click="emit('next')"
           />

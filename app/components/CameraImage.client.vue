@@ -95,7 +95,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="el" class="relative size-full">
+  <!-- Centered so a photo whose aspect ratio differs from the container sits in
+       the middle instead of hugging the left edge. -->
+  <div ref="el" class="relative flex size-full items-center justify-center">
     <img
       v-if="state === 'loaded' && objectUrl"
       :src="objectUrl"
