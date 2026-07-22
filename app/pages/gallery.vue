@@ -215,8 +215,14 @@ defineShortcuts({
         <UButton label="Go to Connect" icon="i-lucide-cable" to="/" />
       </div>
 
-      <div v-else-if="loadingLibrary && groups.length === 0" class="space-y-8" aria-busy="true">
-        <section v-for="section in 2" :key="section">
+      <div
+        v-else-if="loadingLibrary && groups.length === 0"
+        class="space-y-8"
+        role="status"
+        aria-busy="true"
+        aria-label="Reading the camera library"
+      >
+        <section v-for="section in 2" :key="section" aria-hidden="true">
           <div class="mb-2.5 h-5 w-32 animate-pulse rounded bg-elevated" />
           <div
             class="grid gap-2"

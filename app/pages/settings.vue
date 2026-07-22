@@ -123,7 +123,10 @@ useHead({ title: "Settings" });
             <p class="text-sm text-muted">Colourway for the app window.</p>
           </div>
 
-          <ColorwayToggle />
+          <!-- Constrained here only: the sidebar still wants the full-width toggle. -->
+          <div class="max-w-xs">
+            <ColorwayToggle />
+          </div>
         </section>
       </div>
     </template>
