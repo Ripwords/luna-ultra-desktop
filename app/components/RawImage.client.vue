@@ -105,20 +105,36 @@ async function load() {
   // Full-screen preview outranks grid thumbnails for the shared camera slots.
   const priority = props.maxBytes ? CAMERA_PRIORITY.THUMBNAIL : CAMERA_PRIORITY.PREVIEW;
   try {
+    const download = () =>
+      withCameraSlot(async () => {
+        const init: RequestInit = props.maxBytes ? { headers: { Range: `bytes=0-${props.maxBytes - 1}` } } : {};
+        const response = await cameraFetch(props.src, init);
+        if (!response.ok) throw new Error(String(response.status));
+        // If we asked for a byte range (grid thumbnail) but the camera ignored it
+        // and would send the whole multi-MB file, skip rather than download it.
+        if (props.maxBytes && response.status !== 206) {
+          const len = Number(response.headers.get("content-length") ?? 0);
+          if (len === 0 || len > props.maxBytes * 2) return null;
+        }
+        return await downloadBuffer(response);
+      }, priority);
+
     // Hold one camera slot for the entire download (fetch + streamed read); the
-    // CPU-bound decode below runs after the slot is released.
-    const buffer = await withCameraSlot(async () => {
-      const init: RequestInit = props.maxBytes ? { headers: { Range: `bytes=0-${props.maxBytes - 1}` } } : {};
-      const response = await cameraFetch(props.src, init);
-      if (!response.ok) throw new Error(String(response.status));
-      // If we asked for a byte range (grid thumbnail) but the camera ignored it
-      // and would send the whole multi-MB file, skip rather than download it.
-      if (props.maxBytes && response.status !== 206) {
-        const len = Number(response.headers.get("content-length") ?? 0);
-        if (len === 0 || len > props.maxBytes * 2) return null;
+    // CPU-bound decode below runs after the slot is released. The camera can
+    // drop a minutes-long transfer, so the full-screen path retries transient
+    // failures like the reference app does.
+    let buffer: ArrayBuffer | null = null;
+    const maxAttempts = fullFile.value ? 3 : 1;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        buffer = await download();
+        break;
+      } catch (e) {
+        if (attempt >= maxAttempts) throw e;
+        downloaded.value = 0;
+        await new Promise((r) => setTimeout(r, 400 * attempt));
       }
-      return await downloadBuffer(response);
-    }, priority);
+    }
 
     if (buffer === null) {
       reason.value = "range-skipped";

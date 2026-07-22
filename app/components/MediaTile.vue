@@ -46,6 +46,14 @@ function onTileClick(event: MouseEvent) {
       :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
       @loaded="emit('loaded', $event)"
     />
+    <!-- RAW with a sibling JPG (RAW+JPEG pair): show the JPG as its thumbnail -->
+    <CameraImage
+      v-else-if="item.previewUrl"
+      :src="item.previewUrl"
+      :alt="item.name"
+      img-class="size-full object-cover transition-transform duration-300"
+      :class="selected ? 'scale-[0.88] rounded-md' : 'group-hover:scale-[1.03]'"
+    />
     <RawImage
       v-else
       :src="item.srcUrl"
@@ -79,7 +87,14 @@ function onTileClick(event: MouseEvent) {
     </span>
 
     <span
-      v-if="item.panoramic"
+      v-if="item.type === 'photo' && !item.renderable && item.previewUrl"
+      class="absolute bottom-1.5 right-1.5 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[10px] uppercase text-white backdrop-blur-sm"
+    >
+      {{ item.ext }}
+    </span>
+
+    <span
+      v-else-if="item.panoramic"
       class="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white backdrop-blur-sm"
     >
       <UIcon name="i-lucide-globe" class="size-3" />

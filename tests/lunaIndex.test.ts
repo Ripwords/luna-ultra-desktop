@@ -115,3 +115,23 @@ describe("parseLunaIndex", () => {
     expect(files[1]!.size).toBe(18 * 1024 * 1024);
   });
 });
+
+describe("RAW+JPEG sibling pairing", () => {
+  const html = `<pre>
+<a href="IMG_20260707_200510_123.dng">IMG_20260707_200510_123.dng</a> 07-Jul-2026 20:05 71M
+<a href="IMG_20260707_200510_123.jpg">IMG_20260707_200510_123.jpg</a> 07-Jul-2026 20:05 8M
+<a href="IMG_20260708_090000_124.dng">IMG_20260708_090000_124.dng</a> 08-Jul-2026 09:00 71M
+</pre>`;
+
+  it("gives a DNG its sibling JPG as previewUrl", () => {
+    const items = parseLunaIndex(html, CAMERA_BASE);
+    const dng = items.find((i) => i.name === "IMG_20260707_200510_123.dng")!;
+    expect(dng.previewUrl).toBe(`${CAMERA_BASE}IMG_20260707_200510_123.jpg`);
+  });
+
+  it("leaves previewUrl unset for a lone DNG and for the JPG itself", () => {
+    const items = parseLunaIndex(html, CAMERA_BASE);
+    expect(items.find((i) => i.name === "IMG_20260708_090000_124.dng")!.previewUrl).toBeUndefined();
+    expect(items.find((i) => i.name === "IMG_20260707_200510_123.jpg")!.previewUrl).toBeUndefined();
+  });
+});

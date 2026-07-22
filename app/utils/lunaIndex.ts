@@ -119,12 +119,22 @@ export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStor
     if (key) lrvByKey.set(key, entry);
   }
 
+  // RAW+JPEG pairs: the camera saves IMG_x.dng alongside IMG_x.jpg. The JPG is
+  // the same shot, so it serves as the DNG's renderable grid thumbnail.
+  const jpgByBase = new Map<string, RawEntry>();
+  for (const entry of entries) {
+    if (entry.extension !== "jpg" && entry.extension !== "jpeg") continue;
+    jpgByBase.set(entry.name.slice(0, entry.name.lastIndexOf(".")), entry);
+  }
+
   const items: MediaItem[] = [];
   for (const entry of entries) {
     if (entry.extension === "lrv") continue;
     const isVideo = VIDEO_EXTENSIONS.has(entry.extension);
     const key = proxyKey(entry.name);
     const lrv = key ? lrvByKey.get(key) : undefined;
+    const siblingJpg =
+      entry.extension === "dng" ? jpgByBase.get(entry.name.slice(0, entry.name.lastIndexOf("."))) : undefined;
     // PANO_ shots and Insta360 .insp files are equirectangular 360 photos
     const panoramic = !isVideo && (/^PANO_/i.test(entry.name) || entry.extension === "insp");
     items.push({
@@ -140,6 +150,7 @@ export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStor
       cameraPath: entry.cameraPath,
       srcUrl: entry.url,
       lrvUrl: lrv?.url,
+      previewUrl: siblingJpg?.url,
     });
   }
   return items;

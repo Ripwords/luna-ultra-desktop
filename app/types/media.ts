@@ -29,6 +29,11 @@ export interface MediaItem {
   srcUrl: string;
   /** Low-res LRV proxy URL for videos and live photos, when the camera provides one */
   lrvUrl?: string;
+  /**
+   * Renderable stand-in for non-renderable files — e.g. the sibling JPG of a
+   * RAW+JPEG pair, used as the DNG's grid thumbnail.
+   */
+  previewUrl?: string;
 }
 
 export type CameraStatus = "disconnected" | "connecting" | "connected";
