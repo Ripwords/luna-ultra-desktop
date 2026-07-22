@@ -1,6 +1,7 @@
 import type { CameraInfo, MediaItem, MediaStorage } from "~/types/media";
 import { isTauri } from "~/utils/saveFile";
 import { extractCameraSubdirs, parseLunaIndex } from "~/utils/lunaIndex";
+import { reportCameraFailure, reportCameraSuccess } from "~/utils/cameraHealth";
 
 /** Storage roots the Luna Ultra exposes over HTTP, default first. */
 const STORAGE_ROOTS: Array<{ path: string; id: MediaStorage }> = [
@@ -29,13 +30,27 @@ async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): 
   return invoke<T>(command, args);
 }
 
-/** Fetch a camera URL. Uses the Tauri HTTP plugin (bypasses CORS/mixed-content) when packaged. */
+/**
+ * Fetch a camera URL. Uses the Tauri HTTP plugin (bypasses CORS/mixed-content)
+ * when packaged. Every camera request flows through here, so this is also
+ * where the health counter is fed: a completed response of any status means
+ * the camera answered, a thrown request means it did not.
+ */
 export async function cameraFetch(url: string, init?: RequestInit): Promise<Response> {
-  if (isTauri()) {
-    const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-    return tauriFetch(url, init);
+  try {
+    let response: Response;
+    if (isTauri()) {
+      const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+      response = await tauriFetch(url, init);
+    } else {
+      response = await fetch(url, init);
+    }
+    reportCameraSuccess();
+    return response;
+  } catch (error) {
+    reportCameraFailure();
+    throw error;
   }
-  return fetch(url, init);
 }
 
 function toInfo(raw: RawDeviceInfo): CameraInfo {

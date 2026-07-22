@@ -1,5 +1,6 @@
 import type { CameraInfo, CameraStatus, MediaItem } from "~/types/media";
 import { lunaClient } from "~/utils/lunaClient";
+import { armCameraHealth, disarmCameraHealth, FAILURE_THRESHOLD } from "~/utils/cameraHealth";
 
 const DEFAULT_HOST = "192.168.42.1";
 
@@ -41,6 +42,9 @@ export function useCamera() {
       status.value = "connected";
       error.value = null;
       retryAttempt.value = 0;
+      armCameraHealth(() => {
+        void forceDisconnect();
+      });
       await refreshLibrary();
     } catch {
       status.value = "disconnected";
@@ -111,6 +115,9 @@ export function useCamera() {
       status.value = "connected";
       // Auto-reconnect only after a session the user established succeeds
       wantConnection.value = true;
+      armCameraHealth(() => {
+        void forceDisconnect();
+      });
       retryAttempt.value = 0;
       await refreshLibrary();
     } catch (e) {
@@ -120,14 +127,34 @@ export function useCamera() {
     }
   }
 
-  async function disconnect() {
-    wantConnection.value = false;
+  /**
+   * Tear down the session without touching `wantConnection`. Shared by the
+   * user-initiated disconnect and the health-detector disconnect.
+   */
+  async function teardown() {
     clearRetryTimer();
+    disarmCameraHealth();
     await lunaClient.disconnect();
     status.value = "disconnected";
     info.value = null;
     library.value = [];
+  }
+
+  async function disconnect() {
+    wantConnection.value = false;
+    await teardown();
     error.value = null;
+  }
+
+  /**
+   * The camera stopped answering. Drop the session and leave it dropped:
+   * clearing `wantConnection` keeps the backoff reconnect loop dormant so it
+   * cannot immediately undo this. The user reconnects deliberately.
+   */
+  async function forceDisconnect() {
+    wantConnection.value = false;
+    await teardown();
+    error.value = `Lost contact with the camera. Disconnected after ${FAILURE_THRESHOLD} failed requests.`;
   }
 
   /** Remove items locally after the camera confirms deletion. */
