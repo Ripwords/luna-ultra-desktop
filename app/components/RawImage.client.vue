@@ -4,6 +4,7 @@ import { extractDngPreview } from "~/utils/dng";
 import { parseRawImageMeta, decodeRawPreview } from "~/utils/rawPreview";
 import { formatBytes } from "~/utils/media";
 import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
+import { cachedMedia } from "~/utils/mediaCache";
 
 /**
  * Shows a RAW (e.g. DNG) file. Prefers an embedded preview JPEG; when the file
@@ -11,6 +12,10 @@ import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
  * decodes the sensor data into a preview. For grid thumbnails pass `maxBytes`
  * to range-fetch only the start of the file (cheap) — those never raw-decode.
  * Falls back to the `fallback` slot when no preview can be produced.
+ *
+ * The derived preview goes through the session media cache, so reopening a RAW
+ * skips both the multi-MB download and the CPU-bound Bayer decode. Only that
+ * small preview is cached — never the source buffer.
  */
 const props = withDefaults(
   defineProps<{
@@ -98,76 +103,87 @@ function decodeRawToDataUrl(buffer: ArrayBuffer): string | null {
   }
 }
 
+/**
+ * The cache holds one value per RAW: an embedded preview `Blob`, a `data:` URL
+ * from the Bayer decode, or a `nopreview:<reason>` token. The three domains are
+ * disjoint, so the token round-trips the failure reason through the cache and a
+ * cached miss still explains itself in the fallback UI.
+ */
+const NO_PREVIEW = "nopreview:";
+
+/**
+ * Download and derive the preview for this RAW. Runs only on a cache miss; the
+ * progress refs it drives are why it stays a closure over component state.
+ */
+async function fetchPreview(priority: number): Promise<Blob | string> {
+  const download = () =>
+    withCameraSlot(async () => {
+      const init: RequestInit = props.maxBytes ? { headers: { Range: `bytes=0-${props.maxBytes - 1}` } } : {};
+      const response = await cameraFetch(props.src, init);
+      if (!response.ok) throw new Error(String(response.status));
+      // If we asked for a byte range (grid thumbnail) but the camera ignored it
+      // and would send the whole multi-MB file, skip rather than download it.
+      if (props.maxBytes && response.status !== 206) {
+        const len = Number(response.headers.get("content-length") ?? 0);
+        if (len === 0 || len > props.maxBytes * 2) return null;
+      }
+      return await downloadBuffer(response);
+    }, priority);
+
+  // Hold one camera slot for the entire download (fetch + streamed read); the
+  // CPU-bound decode below runs after the slot is released. The camera can
+  // drop a minutes-long transfer, so the full-screen path retries transient
+  // failures like the reference app does.
+  let buffer: ArrayBuffer | null = null;
+  const maxAttempts = fullFile.value ? 3 : 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      buffer = await download();
+      break;
+    } catch (e) {
+      if (attempt >= maxAttempts) throw e;
+      downloaded.value = 0;
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
+
+  if (buffer === null) return `${NO_PREVIEW}range-skipped`;
+
+  // Fast path: an embedded preview JPEG (many RAW formats carry one).
+  const embedded = extractDngPreview(buffer, props.prefer);
+  if (embedded) return embedded;
+
+  // No embedded JPEG: if we hold the whole file (full-screen view, not a grid
+  // range-fetch), decode the raw Bayer sensor data into a preview.
+  if (fullFile.value) {
+    phase.value = "decoding";
+    await nextTick(); // let the "Rendering preview…" state paint before the sync decode
+    return decodeRawToDataUrl(buffer) ?? `${NO_PREVIEW}decode-failed`;
+  }
+
+  return `${NO_PREVIEW}no-preview`;
+}
+
 async function load() {
   if (state.value !== "idle") return;
   state.value = "loading";
   phase.value = "downloading";
   // Full-screen preview outranks grid thumbnails for the shared camera slots.
   const priority = props.maxBytes ? CAMERA_PRIORITY.THUMBNAIL : CAMERA_PRIORITY.PREVIEW;
+  // Key on everything that changes the derived output: a range-limited grid
+  // thumbnail and a full-file preview of one file are different artifacts.
+  const key = `raw:${props.src}:${props.maxBytes ?? "full"}:${props.prefer}`;
   try {
-    const download = () =>
-      withCameraSlot(async () => {
-        const init: RequestInit = props.maxBytes ? { headers: { Range: `bytes=0-${props.maxBytes - 1}` } } : {};
-        const response = await cameraFetch(props.src, init);
-        if (!response.ok) throw new Error(String(response.status));
-        // If we asked for a byte range (grid thumbnail) but the camera ignored it
-        // and would send the whole multi-MB file, skip rather than download it.
-        if (props.maxBytes && response.status !== 206) {
-          const len = Number(response.headers.get("content-length") ?? 0);
-          if (len === 0 || len > props.maxBytes * 2) return null;
-        }
-        return await downloadBuffer(response);
-      }, priority);
+    const result = await cachedMedia(key, () => fetchPreview(priority));
 
-    // Hold one camera slot for the entire download (fetch + streamed read); the
-    // CPU-bound decode below runs after the slot is released. The camera can
-    // drop a minutes-long transfer, so the full-screen path retries transient
-    // failures like the reference app does.
-    let buffer: ArrayBuffer | null = null;
-    const maxAttempts = fullFile.value ? 3 : 1;
-    for (let attempt = 1; ; attempt++) {
-      try {
-        buffer = await download();
-        break;
-      } catch (e) {
-        if (attempt >= maxAttempts) throw e;
-        downloaded.value = 0;
-        await new Promise((r) => setTimeout(r, 400 * attempt));
-      }
-    }
-
-    if (buffer === null) {
-      reason.value = "range-skipped";
+    if (!result || (typeof result === "string" && result.startsWith(NO_PREVIEW))) {
+      reason.value = result ? (result.slice(NO_PREVIEW.length) as typeof reason.value) : "no-preview";
       state.value = "nopreview";
       return;
     }
 
-    // Fast path: an embedded preview JPEG (many RAW formats carry one).
-    const embedded = extractDngPreview(buffer, props.prefer);
-    if (embedded) {
-      imgSrc.value = URL.createObjectURL(embedded);
-      state.value = "loaded";
-      return;
-    }
-
-    // No embedded JPEG: if we hold the whole file (full-screen view, not a grid
-    // range-fetch), decode the raw Bayer sensor data into a preview.
-    if (fullFile.value) {
-      phase.value = "decoding";
-      await nextTick(); // let the "Rendering preview…" state paint before the sync decode
-      const url = decodeRawToDataUrl(buffer);
-      if (url) {
-        imgSrc.value = url;
-        state.value = "loaded";
-        return;
-      }
-      reason.value = "decode-failed";
-      state.value = "nopreview";
-      return;
-    }
-
-    reason.value = "no-preview";
-    state.value = "nopreview";
+    imgSrc.value = typeof result === "string" ? result : URL.createObjectURL(result);
+    state.value = "loaded";
   } catch {
     reason.value = "network";
     state.value = "error";

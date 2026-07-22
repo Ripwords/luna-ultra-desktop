@@ -2,11 +2,17 @@
 import { cameraFetch } from "~/utils/lunaClient";
 import { imageMimeFor } from "~/utils/media";
 import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
+import { cachedMedia } from "~/utils/mediaCache";
 
 /**
  * Loads a camera image through the Tauri HTTP plugin (the camera's plain-HTTP
  * host can't be used as a direct <img src> from the packaged app), converts it
  * to an object URL, and only fetches once it scrolls near the viewport.
+ *
+ * The downloaded blob goes through the session media cache, so scrolling a tile
+ * away and back — or opening the same photo full-screen — costs no Wi-Fi
+ * transfer. This component still owns its own object URL, created per mount and
+ * revoked on unmount; the cache owns only the blob.
  */
 const props = withDefaults(
   defineProps<{
@@ -42,15 +48,20 @@ async function load() {
   // Full-screen views (eager) outrank background grid thumbnails for the camera.
   const priority = props.eager ? CAMERA_PRIORITY.PREVIEW : CAMERA_PRIORITY.THUMBNAIL;
   try {
-    const blob = await withCameraSlot(async () => {
-      const response = await cameraFetch(props.src);
-      if (!response.ok) throw new Error(String(response.status));
-      const raw = await response.blob();
-      // The camera may serve images as octet-stream; force the right MIME so
-      // the browser renders the blob (fixes .insp and mistyped JPEGs).
-      const mime = imageMimeFor(props.src);
-      return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
-    }, priority);
+    // The camera slot is taken inside the loader so a cache hit never queues
+    // behind live camera traffic.
+    const blob = await cachedMedia(`img:${props.src}`, () =>
+      withCameraSlot(async () => {
+        const response = await cameraFetch(props.src);
+        if (!response.ok) throw new Error(String(response.status));
+        const raw = await response.blob();
+        // The camera may serve images as octet-stream; force the right MIME so
+        // the browser renders the blob (fixes .insp and mistyped JPEGs).
+        const mime = imageMimeFor(props.src);
+        return mime && raw.type !== mime ? new Blob([raw], { type: mime }) : raw;
+      }, priority),
+    );
+    if (!blob) throw new Error("no image");
     objectUrl.value = URL.createObjectURL(blob);
     state.value = "loaded";
   } catch {
