@@ -23,6 +23,15 @@ const UCD2_VERSION: u8 = 0x01;
 const UCD2_FLAGS: u8 = 0x0c;
 const UCD2_FILE: u8 = 0x04;
 const UCD2_STREAM: u8 = 0x05;
+/// Live media (video, secondary preview, gyro) rides its own frame type.
+const UCD2_MEDIA: u8 = 0x01;
+
+/// Every media frame opens with a 9-byte header; the Annex-B elementary
+/// stream begins immediately after it.
+const MEDIA_HEADER_LEN: usize = 9;
+/// Substream selector, the first header byte. 0x30 is the secondary preview
+/// and 0x40 is gyro; only the primary video is forwarded.
+pub(crate) const MEDIA_VIDEO: u8 = 0x20;
 
 pub(crate) const CODE_START_LIVE_STREAM: u16 = 1;
 pub(crate) const CODE_STOP_LIVE_STREAM: u16 = 2;
@@ -142,18 +151,19 @@ pub(crate) struct RawResponse {
     body: Vec<u8>,
 }
 
-/// A parsed UCD2 frame. FILE frames answer commands; STREAM frames are the
-/// keepalive hello (empty payload) or live video data.
+/// A parsed UCD2 frame. FILE answers commands, STREAM is the keepalive
+/// echo, and MEDIA carries the live preview substreams.
 #[derive(Debug, Clone)]
 pub(crate) enum Frame {
     File(RawResponse),
     Stream(Vec<u8>),
+    Media { substream: u8, data: Vec<u8> },
 }
 
 /// Incremental UCD2 frame scanner over the receive buffer. Returns complete
 /// frames and consumes processed bytes.
 ///
-/// FILE and STREAM share one length formula: `12 + declared + 4`. The
+/// All three frame types share one length formula: `12 + declared + 4`. The
 /// keepalive hello declares zero and is 16 bytes, so it is simply the
 /// degenerate case rather than a special case.
 fn drain_frames(buffer: &mut Vec<u8>) -> Vec<Frame> {
@@ -170,7 +180,7 @@ fn drain_frames(buffer: &mut Vec<u8>) -> Vec<Frame> {
             break;
         }
         let frame_type = buffer[6];
-        if frame_type != UCD2_FILE && frame_type != UCD2_STREAM {
+        if frame_type != UCD2_FILE && frame_type != UCD2_STREAM && frame_type != UCD2_MEDIA {
             buffer.drain(..8);
             continue;
         }
@@ -188,6 +198,15 @@ fn drain_frames(buffer: &mut Vec<u8>) -> Vec<Frame> {
 
         if frame_type == UCD2_STREAM {
             frames.push(Frame::Stream(frame[12..12 + declared].to_vec()));
+            continue;
+        }
+        if frame_type == UCD2_MEDIA {
+            if declared > MEDIA_HEADER_LEN {
+                frames.push(Frame::Media {
+                    substream: frame[12],
+                    data: frame[12 + MEDIA_HEADER_LEN..12 + declared].to_vec(),
+                });
+            }
             continue;
         }
         if declared < 9 {
@@ -424,10 +443,14 @@ async fn open_session(app: AppHandle, state: Arc<Mutex<Option<Arc<Session>>>>, h
                                     let _ = tx.send(response);
                                 }
                             }
-                            // Empty payloads are keepalive echoes, not video
-                            Frame::Stream(payload) if !payload.is_empty() => {
-                                let _ = stream_tx.send(payload);
+                            Frame::Media { substream, data }
+                                if substream == MEDIA_VIDEO && !data.is_empty() =>
+                            {
+                                let _ = stream_tx.send(data);
                             }
+                            // Secondary preview and gyro substreams are ignored
+                            Frame::Media { .. } => {}
+                            // STREAM frames are keepalive echoes, never video
                             Frame::Stream(_) => {}
                         }
                     }
@@ -613,6 +636,41 @@ mod tests {
             other => panic!("expected the hello, got {other:?}"),
         }
         assert!(buffer.is_empty(), "both frames should be consumed");
+    }
+
+    /// Video rides UCD2 type 0x01, not STREAM. Each media frame begins with a
+    /// 9-byte header whose first byte selects the substream; the Annex-B
+    /// elementary stream follows. Header bytes are taken from a real capture.
+    #[test]
+    fn drain_frames_extracts_video_from_media_frames() {
+        let annex_b = [0x00, 0x00, 0x00, 0x01, 0x40, 0x01, 0x0c, 0x01];
+        let build = |substream: u8| {
+            let mut payload = vec![substream, 0x25, 0xde, 0xa9, 0, 0, 0, 0, 0];
+            payload.extend_from_slice(&annex_b);
+            let mut frame_payload = Vec::new();
+            frame_payload.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            frame_payload.extend_from_slice(&payload);
+            frame_payload.extend_from_slice(&[0u8; 4]); // trailer
+            build_ucd2(UCD2_MEDIA, 7, &frame_payload)
+        };
+
+        let mut buffer = build(MEDIA_VIDEO);
+        buffer.extend_from_slice(&build(0x40)); // gyro substream
+
+        let frames = drain_frames(&mut buffer);
+        assert_eq!(frames.len(), 2);
+        match &frames[0] {
+            Frame::Media { substream, data } => {
+                assert_eq!(*substream, MEDIA_VIDEO);
+                assert_eq!(data, &annex_b, "the 9-byte header must be stripped");
+            }
+            other => panic!("expected a media frame, got {other:?}"),
+        }
+        match &frames[1] {
+            Frame::Media { substream, .. } => assert_eq!(*substream, 0x40),
+            other => panic!("expected the gyro frame, got {other:?}"),
+        }
+        assert!(buffer.is_empty());
     }
 
     /// The existing FILE parsing must be untouched by the refactor.
