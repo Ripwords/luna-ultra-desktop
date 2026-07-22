@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const { isConnected } = useCamera();
-const { device, settings, mode, loading, error, load } = useCameraSettings();
+const { device, settings, loading, error, load } = useCameraSettings();
 
 useHead({ title: "Camera" });
 
@@ -33,10 +33,6 @@ const resolution = computed(() =>
     : null,
 );
 
-const modes = [
-  { label: "Video", value: "FUNCTION_MODE_NORMAL_VIDEO" },
-  { label: "Photo", value: "FUNCTION_MODE_NORMAL_IMAGE" },
-];
 </script>
 
 <template>
@@ -105,8 +101,9 @@ const modes = [
             size="sm"
             @update:model-value="(value) => (pro = value === 'pro')"
           />
-          <USelect v-model="mode" :items="modes" size="sm" class="ml-auto w-32" />
         </div>
+
+        <CameraCaptureBar />
 
         <CameraProBar v-if="pro" />
 

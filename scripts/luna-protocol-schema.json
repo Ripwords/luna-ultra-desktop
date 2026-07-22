@@ -124,6 +124,20 @@
    "1": "TIMEOUT",
    "2": "ERROR_CONNECT_FAILED"
   },
+  "insta360.messages.CaptureMode": {
+   "0": "Capture_MODE_UNKNOWN",
+   "1": "Capture_MODE_NORMAL",
+   "10": "Capture_MODE_SELFIE",
+   "11": "Capture_MODE_PURE_VIDEO",
+   "2": "Capture_MODE_BULLETTIME",
+   "3": "Capture_MODE_HDR",
+   "4": "Capture_MODE_TIMESHIFT",
+   "5": "Capture_MODE_SUPER_VIDEO",
+   "6": "Capture_MODE_LOOPRECORDING",
+   "7": "Capture_MODE_FPV",
+   "8": "Capture_MODE_MOVIE",
+   "9": "Capture_MODE_SLOWMOTION"
+  },
   "insta360.messages.CardLocation": {
    "0": "STOR_CL_CAMERA",
    "1": "STOR_CL_READER"
@@ -135,6 +149,19 @@
    "3": "STOR_CS_INVALID_FORMAT",
    "4": "STOR_CS_WPCARD",
    "5": "STOR_CS_OTHER_ERROR"
+  },
+  "insta360.messages.ChargeboxConnectedStatus.ChargeboxConnectedType": {
+   "0": "disconnected",
+   "1": "connected"
+  },
+  "insta360.messages.ChargeboxConnectedStatus.ChargeboxOnOffInfo": {
+   "0": "offline",
+   "1": "online"
+  },
+  "insta360.messages.ChargeboxConnectedStatus.ChargeboxUsbBtConnectedType": {
+   "0": "usb_bt_status_undefined",
+   "1": "usb_bt_status_disconnected",
+   "2": "usb_bt_status_connected"
   },
   "insta360.messages.ChargingMessageCode": {
    "0": "FAC_OLED_TEST",
@@ -221,6 +248,15 @@
    "0": "UNKNOWN_LOGO_TYPE",
    "1": "NO_LOGO",
    "2": "INSTA_LOGO"
+  },
+  "insta360.messages.ExtraMetadata.ExtraUserOptions.OffsetConvertState": {
+   "0": "WaterProof",
+   "1": "DivingWater",
+   "2": "DivingAir",
+   "3": "StitchOptimization",
+   "4": "Protect",
+   "5": "SphereProtect",
+   "6": "FpvProtect"
   },
   "insta360.messages.ExtraMetadata.GpsSource": {
    "0": "GSV",
@@ -320,7 +356,11 @@
    "4": "TIMESCALE_1_8X"
   },
   "insta360.messages.ExtraMetadata.TriggerSource": {
-   "3": "USB"
+   "0": "Unknown",
+   "1": "CameraButton",
+   "2": "RemoteControl",
+   "3": "USB",
+   "4": "BtRemote"
   },
   "insta360.messages.ExtraMetadata.VideoMediaDataRotateAngle": {
    "0": "MEDIA_DATA_ROTATE_UNKNOWN",
@@ -654,6 +694,11 @@
    "1": "F0_DOUBLE_PRESS",
    "2": "F0_TRIPLE_PRESS"
   },
+  "insta360.messages.OffsetState": {
+   "0": "Common",
+   "1": "SphereProtect",
+   "2": "DivingWater"
+  },
   "insta360.messages.OpenIperfService.Mode": {
    "0": "TCP",
    "1": "UDP"
@@ -779,6 +824,11 @@
    "1": "BT_REMOTE_WITHOUT_GPS",
    "2": "BT_REMOTE_WITH_GPS"
   },
+  "insta360.messages.Options.Bt_Wakeup_Sw": {
+   "0": "Bt_Wakeup_Sw_Off",
+   "1": "Bt_Wakeup_Sw_On",
+   "2": "Bt_Wakeup_Sw_Unknown"
+  },
   "insta360.messages.Options.CameraPostureType": {
    "0": "CAMERA_POSTURE_ROTATE_0",
    "1": "CAMERA_POSTURE_ROTATE_90",
@@ -855,6 +905,21 @@
   "insta360.messages.Options.WifiStatus": {
    "0": "AUTO",
    "1": "ON"
+  },
+  "insta360.messages.PhotoSize": {
+   "0": "Size_6912_3456",
+   "1": "Size_6272_3136",
+   "10": "Size_5984_5984",
+   "11": "Size_11968_5984",
+   "12": "Size_5952_2976",
+   "2": "Size_6080_3040",
+   "3": "Size_4000_3000",
+   "4": "Size_4000_2250",
+   "5": "Size_5212_3542",
+   "6": "Size_5312_2988",
+   "7": "Size_8000_6000",
+   "8": "Size_8000_4500",
+   "9": "Size_2976_2976"
   },
   "insta360.messages.PhotoSubMode": {
    "0": "PHOTO_SINGLE",
@@ -944,6 +1009,12 @@
    "0": "PROG_MODE_OFF",
    "1": "PROG_MODE_ISO",
    "2": "PROG_MODE_SHUTTER_SPEED"
+  },
+  "insta360.messages.PhotographyOptions.Flow_State_Level": {
+   "0": "Flow_State_Level_Close",
+   "1": "Flow_State_Level_Low",
+   "2": "Flow_State_Level_Standard",
+   "3": "FLOW_State_Level_High"
   },
   "insta360.messages.PhotographyOptions.Fov_Type": {
    "0": "FOV_WIDE",
@@ -1063,6 +1134,11 @@
    "1": "STANDBY_MODE_LOW_ENERGY",
    "2": "STANDBY_MODE_WAKE_UP"
   },
+  "insta360.messages.SetWifiSeizeEnable.ConnectionState": {
+   "0": "unknown",
+   "1": "monopolized",
+   "2": "seizable"
+  },
   "insta360.messages.SyncCaptureMode": {
    "0": "SYNC_MODE_UNKNOWN",
    "1": "SYNC_MODE_NORMAL_IMAGE",
@@ -1099,6 +1175,23 @@
    "7": "TIMELAPSE_QC_DOUBLE_PRESS",
    "8": "TIMELAPSE_CAMERA_SINGLE_PRESS",
    "9": "TIMELAPSE_CAMERA_DOUBLE_PRESS"
+  },
+  "insta360.messages.TimelapseOptions.OutputType": {
+   "0": "DoNotChange",
+   "1": "Video",
+   "2": "Images"
+  },
+  "insta360.messages.TrackStatus": {
+   "0": "Track_IDLE",
+   "1": "Track_Sync",
+   "2": "Track_Start",
+   "3": "Track_End",
+   "4": "Track_Timeout"
+  },
+  "insta360.messages.TransferStatus": {
+   "0": "TransferUnknown",
+   "1": "TransferSuccess",
+   "2": "TransferFail"
   },
   "insta360.messages.UpgradeStateOptions.Upgrage_State": {
    "0": "UPGRADE_STATE_IDLE",

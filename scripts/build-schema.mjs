@@ -20,6 +20,9 @@ const ROOTS = [
   "insta360.messages.SetPhotographyOptionsResp",
   "insta360.messages.GetCurrentCaptureStatusResp",
   "insta360.messages.CameraCaptureStatus",
+  "insta360.messages.StartCapture",
+  "insta360.messages.StopCapture",
+  "insta360.messages.TakePicture",
 ];
 
 /** Enums reachable only through option-type lists, not through a field. */
@@ -27,6 +30,9 @@ const EXTRA_ENUMS = [
   "insta360.messages.OptionType",
   "insta360.messages.PhotographyOptionType",
   "insta360.messages.FunctionMode",
+  "insta360.messages.CaptureMode",
+  "insta360.messages.VideoSubMode",
+  "insta360.messages.PhotoSubMode",
 ];
 
 const full = JSON.parse(fs.readFileSync("scripts/luna-protocol-schema.json", "utf8"));

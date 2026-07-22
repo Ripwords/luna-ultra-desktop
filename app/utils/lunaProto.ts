@@ -43,6 +43,10 @@ export const MSG = {
   SetPhotographyOptions: "insta360.messages.SetPhotographyOptions",
   SetPhotographyOptionsResp: "insta360.messages.SetPhotographyOptionsResp",
   CameraCaptureStatus: "insta360.messages.CameraCaptureStatus",
+  GetCurrentCaptureStatusResp: "insta360.messages.GetCurrentCaptureStatusResp",
+  StartCapture: "insta360.messages.StartCapture",
+  StopCapture: "insta360.messages.StopCapture",
+  TakePicture: "insta360.messages.TakePicture",
 } as const;
 
 export const OPTION_TYPE = "insta360.messages.OptionType";
