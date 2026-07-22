@@ -1,5 +1,5 @@
 import type { CameraInfo, CameraStatus, MediaItem } from "~/types/media";
-import { lunaClient } from "~/utils/lunaClient";
+import { lunaClient, probeCamera } from "~/utils/lunaClient";
 import { armCameraHealth, disarmCameraHealth, FAILURE_THRESHOLD } from "~/utils/cameraHealth";
 
 const DEFAULT_HOST = "192.168.42.1";
@@ -17,7 +17,9 @@ export function useCamera() {
   const library = useState<MediaItem[]>("camera-library", () => []);
   const host = useState<string>("camera-host", () => {
     if (import.meta.client) {
-      const stored = localStorage.getItem(HOST_STORAGE_KEY);
+      // Trim on read as well as on write: a blank stored value is treated as
+      // absent so it falls back to the default instead of an empty address.
+      const stored = localStorage.getItem(HOST_STORAGE_KEY)?.trim();
       if (stored) return stored;
     }
     return DEFAULT_HOST;
@@ -57,9 +59,12 @@ export function useCamera() {
       status.value = "connected";
       error.value = null;
       retryAttempt.value = 0;
-      armCameraHealth(() => {
-        void forceDisconnect();
-      });
+      armCameraHealth(
+        () => {
+          void forceDisconnect();
+        },
+        () => probeCamera(host.value),
+      );
       await refreshLibrary();
     } catch {
       status.value = "disconnected";
@@ -135,9 +140,12 @@ export function useCamera() {
       status.value = "connected";
       // Auto-reconnect only after a session the user established succeeds
       wantConnection.value = true;
-      armCameraHealth(() => {
-        void forceDisconnect();
-      });
+      armCameraHealth(
+        () => {
+          void forceDisconnect();
+        },
+        () => probeCamera(host.value),
+      );
       retryAttempt.value = 0;
       await refreshLibrary();
     } catch (e) {
@@ -174,7 +182,7 @@ export function useCamera() {
   async function forceDisconnect() {
     wantConnection.value = false;
     await teardown();
-    error.value = `Lost contact with the camera. Disconnected after ${FAILURE_THRESHOLD} failed requests.`;
+    error.value = `Lost contact with the camera. Disconnected after ${FAILURE_THRESHOLD} failed requests and a failed health check.`;
   }
 
   /** Remove items locally after the camera confirms deletion. */
