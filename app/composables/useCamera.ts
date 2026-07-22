@@ -83,6 +83,11 @@ export function useCamera() {
       library.value = [];
       error.value = "Lost connection to the camera. Reconnecting…";
       retryAttempt.value = 0;
+      // This is a known socket close, not a silently-unresponsive camera: disarm the
+      // health detector so its failure count can't race scheduleReconnect() below and
+      // trigger forceDisconnect(), which would cancel this reconnect. It re-arms itself
+      // once tryReconnect() succeeds again.
+      disarmCameraHealth();
       scheduleReconnect();
     });
   }
