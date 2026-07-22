@@ -37,13 +37,14 @@ useHead({ title: "Settings" });
               v-model="host"
               placeholder="192.168.42.1"
               icon="i-lucide-router"
-              :disabled="isBusy || !available"
+              :disabled="isBusy || isConnected || !available"
               autocomplete="off"
               spellcheck="false"
               class="w-full font-mono"
             />
             <template #help>
               Default Luna Ultra Wi-Fi gateway. Include a port for the dev mock (127.0.0.1:18080).
+              <template v-if="isConnected"> Disconnect first to change the address.</template>
             </template>
           </UFormField>
 
