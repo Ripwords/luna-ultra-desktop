@@ -35,7 +35,13 @@ pub(crate) const MEDIA_VIDEO: u8 = 0x20;
 
 pub(crate) const CODE_START_LIVE_STREAM: u16 = 1;
 pub(crate) const CODE_STOP_LIVE_STREAM: u16 = 2;
+const CODE_TAKE_PICTURE: u16 = 3;
+const CODE_START_CAPTURE: u16 = 4;
+const CODE_STOP_CAPTURE: u16 = 5;
+const CODE_SET_OPTIONS: u16 = 7;
 const CODE_GET_OPTIONS: u16 = 8;
+const CODE_SET_PHOTOGRAPHY_OPTIONS: u16 = 9;
+const CODE_GET_PHOTOGRAPHY_OPTIONS: u16 = 10;
 const CODE_DELETE_FILES: u16 = 12;
 const CODE_GET_CURRENT_CAPTURE_STATUS: u16 = 15;
 
@@ -572,6 +578,39 @@ pub async fn luna_delete_files(state: State<'_, LunaState>, paths: Vec<String>) 
     Ok(())
 }
 
+/// Commands the UI may send as raw protobuf. Deliberately excludes
+/// DELETE_FILES, which keeps its own batching command, and anything not
+/// listed here — the webview should not be able to reach arbitrary firmware
+/// commands just because the transport can carry them.
+fn is_allowed_command(code: u16) -> bool {
+    matches!(
+        code,
+        CODE_TAKE_PICTURE
+            | CODE_START_CAPTURE
+            | CODE_STOP_CAPTURE
+            | CODE_SET_OPTIONS
+            | CODE_GET_OPTIONS
+            | CODE_SET_PHOTOGRAPHY_OPTIONS
+            | CODE_GET_PHOTOGRAPHY_OPTIONS
+            | CODE_GET_CURRENT_CAPTURE_STATUS
+    )
+}
+
+/// Send a protobuf body to the camera and return the raw response body.
+/// Encoding and decoding live in the frontend, which owns the schema.
+#[tauri::command]
+pub async fn luna_command(state: State<'_, LunaState>, code: u16, body: Vec<u8>) -> Result<Vec<u8>, String> {
+    if !is_allowed_command(code) {
+        return Err(format!("command {code} is not permitted"));
+    }
+    let session = state
+        .session()
+        .await
+        .ok_or_else(|| "camera is not connected".to_string())?;
+    let response = session.send_command(code, &body, Duration::from_secs(10)).await?;
+    Ok(response.body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,6 +675,26 @@ mod tests {
             other => panic!("expected the hello, got {other:?}"),
         }
         assert!(buffer.is_empty(), "both frames should be consumed");
+    }
+
+    /// The allowlist is the safety boundary between the webview and the
+    /// camera. Destructive codes must not be reachable through it.
+    #[test]
+    fn command_allowlist_covers_settings_but_not_deletion() {
+        for code in [
+            CODE_TAKE_PICTURE,
+            CODE_START_CAPTURE,
+            CODE_STOP_CAPTURE,
+            CODE_SET_OPTIONS,
+            CODE_GET_OPTIONS,
+            CODE_SET_PHOTOGRAPHY_OPTIONS,
+            CODE_GET_PHOTOGRAPHY_OPTIONS,
+            CODE_GET_CURRENT_CAPTURE_STATUS,
+        ] {
+            assert!(is_allowed_command(code), "code {code} should be allowed");
+        }
+        assert!(!is_allowed_command(CODE_DELETE_FILES), "deletion has its own command");
+        assert!(!is_allowed_command(9999), "unknown codes must be refused");
     }
 
     /// Video rides UCD2 type 0x01, not STREAM. Each media frame begins with a

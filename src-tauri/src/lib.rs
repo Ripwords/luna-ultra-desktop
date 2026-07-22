@@ -14,6 +14,7 @@ pub fn run() {
       luna::luna_disconnect,
       luna::luna_status,
       luna::luna_delete_files,
+      luna::luna_command,
       liveview::luna_liveview_start,
       liveview::luna_liveview_stop,
       liveview::luna_liveview_stats,
