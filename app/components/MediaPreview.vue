@@ -70,15 +70,20 @@ const moreItems = computed(() => [
   ],
 ]);
 
+// While the overflow menu is open it owns the keyboard: Escape should close
+// the menu, not the whole preview, and the arrows should not navigate files
+// underneath it.
+const moreOpen = ref(false);
+
 defineShortcuts({
   arrowleft: () => {
-    if (open.value) emit("prev");
+    if (open.value && !moreOpen.value) emit("prev");
   },
   arrowright: () => {
-    if (open.value) emit("next");
+    if (open.value && !moreOpen.value) emit("next");
   },
   escape: () => {
-    if (open.value) open.value = false;
+    if (open.value && !moreOpen.value) open.value = false;
   },
 });
 </script>
@@ -94,7 +99,7 @@ defineShortcuts({
           </div>
           <div class="flex items-center gap-1.5">
             <UButton icon="i-lucide-arrow-down-to-line" label="Download" size="sm" color="neutral" variant="outline" @click="emit('download')" />
-            <UDropdownMenu :items="moreItems">
+            <UDropdownMenu v-model:open="moreOpen" :items="moreItems">
               <UButton icon="i-lucide-ellipsis" size="sm" color="neutral" variant="ghost" aria-label="More actions" />
             </UDropdownMenu>
             <span class="mx-1 h-5 w-px bg-default" aria-hidden="true" />
