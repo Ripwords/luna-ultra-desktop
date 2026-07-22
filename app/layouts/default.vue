@@ -13,6 +13,11 @@ const items = computed<NavigationMenuItem[][]>(() => [
       active: route.path === "/",
     },
     {
+      label: "Camera",
+      icon: "i-lucide-camera",
+      to: "/camera",
+    },
+    {
       label: "Gallery",
       icon: "i-lucide-images",
       to: "/gallery",
