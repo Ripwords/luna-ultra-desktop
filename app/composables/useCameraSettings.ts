@@ -37,6 +37,25 @@ export function useCameraSettings() {
     status.value = { ...status.value, [field]: { ...next, at: Date.now() } };
   };
 
+  /**
+   * Nested writes like exposure_manual compare as "[object Object]" under
+   * String(), which would call every one of them a match. Compare the fields
+   * we actually asked for instead, ignoring extras the camera adds.
+   */
+  const matches = (requested: ProtoValue, actual: ProtoValue): boolean => {
+    if (typeof requested === "object" && requested !== null && !Array.isArray(requested)) {
+      if (typeof actual !== "object" || actual === null || Array.isArray(actual)) return false;
+      const observed = actual as Record<string, ProtoValue | undefined>;
+      return Object.entries(requested).every(
+        ([key, value]) => value === undefined || String(observed[key]) === String(value),
+      );
+    }
+    return String(requested) === String(actual);
+  };
+
+  const describe = (value: ProtoValue): string =>
+    typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+
   async function load() {
     if (!isConnected.value || loading.value) return;
     loading.value = true;
@@ -89,9 +108,9 @@ export function useCameraSettings() {
       settings.value = { ...settings.value, [field]: actual };
       setStatus(
         field,
-        String(actual) === String(value)
+        matches(value, actual)
           ? { outcome: "applied" }
-          : { outcome: "differs", actual: String(actual) },
+          : { outcome: "differs", actual: describe(actual) },
       );
     } catch (cause) {
       settings.value = { ...settings.value, [field]: previous };
@@ -102,10 +121,37 @@ export function useCameraSettings() {
     }
   }
 
+  /**
+   * Manual ISO and shutter only take effect in manual exposure mode, so set
+   * the mode in the same breath rather than leaving the user to discover it.
+   */
+  async function setManualExposure(patch: { iso?: number; shutter_speed?: string }) {
+    const current = (settings.value.exposure_manual as ProtoObject | undefined) ?? {};
+    const next: ProtoObject = {
+      iso: patch.iso ?? (current.iso as number | undefined),
+      shutter_speed: patch.shutter_speed ?? (current.shutter_speed as string | undefined),
+    };
+    if (settings.value.exposure_mode !== "EXP_MODE_MANUAL") {
+      await update("EXPOSURE_MODE", "exposure_mode", "EXP_MODE_MANUAL");
+    }
+    await update("EXPOSURE_MANUAL", "exposure_manual", next);
+  }
+
   watch(mode, () => void load());
   watch(isConnected, (connected) => {
     if (connected) void load();
   });
 
-  return { settings, device, mode, loading, saving, error, status, load, update };
+  return {
+    settings,
+    device,
+    mode,
+    loading,
+    saving,
+    error,
+    status,
+    load,
+    update,
+    setManualExposure,
+  };
 }

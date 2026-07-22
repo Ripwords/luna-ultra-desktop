@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { enumNames } from "~/utils/lunaProto";
 
-const { settings, device, mode, loading, saving, error, status, load, update } = useCameraSettings();
+const { settings, device, saving, status, load, update } = useCameraSettings();
 
 /**
  * Several settings change nothing you can see in the preview, so each control
@@ -125,36 +125,7 @@ onMounted(() => void load());
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-wrap items-center gap-3">
-      <USelect v-model="mode" :items="modes" class="w-40" />
-      <UButton
-        label="Reload"
-        icon="i-lucide-refresh-cw"
-        color="neutral"
-        variant="ghost"
-        :loading="loading"
-        @click="load"
-      />
-      <div class="ml-auto flex flex-wrap items-center gap-4 text-sm text-muted">
-        <span v-if="battery !== null">
-          <UIcon name="i-lucide-battery" class="mr-1 align-middle" />{{ battery }}%
-        </span>
-        <span v-if="storage">
-          <UIcon name="i-lucide-hard-drive" class="mr-1 align-middle" />
-          {{ storage.free.toFixed(1) }} / {{ storage.total.toFixed(0) }} GB
-        </span>
-        <span v-if="device.firmwareRevision">fw {{ device.firmwareRevision }}</span>
-      </div>
-    </div>
-
-    <UAlert
-      v-if="error"
-      icon="i-lucide-triangle-alert"
-      color="warning"
-      variant="subtle"
-      :title="error"
-    />
-
+    <p class="text-xs font-medium tracking-wider text-dimmed">ADVANCED</p>
     <div class="grid gap-4 sm:grid-cols-2">
       <UFormField v-for="picker in pickers" :key="picker.field">
         <template #label>
