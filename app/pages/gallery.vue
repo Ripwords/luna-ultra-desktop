@@ -215,9 +215,16 @@ defineShortcuts({
         <UButton label="Go to Connect" icon="i-lucide-cable" to="/" />
       </div>
 
-      <div v-else-if="loadingLibrary && groups.length === 0" class="flex h-full flex-col items-center justify-center gap-3 text-center">
-        <UIcon name="i-lucide-loader-circle" class="size-7 animate-spin text-dimmed" />
-        <p class="text-sm text-muted">Reading the camera library</p>
+      <div v-else-if="loadingLibrary && groups.length === 0" class="space-y-8" aria-busy="true">
+        <section v-for="section in 2" :key="section">
+          <div class="mb-2.5 h-5 w-32 animate-pulse rounded bg-elevated" />
+          <div
+            class="grid gap-2"
+            :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileMin}px, 1fr))` }"
+          >
+            <div v-for="tile in 12" :key="tile" class="aspect-square animate-pulse rounded-lg bg-elevated" />
+          </div>
+        </section>
       </div>
 
       <div v-else-if="groups.length === 0" class="flex h-full flex-col items-center justify-center gap-4 text-center">
@@ -235,7 +242,7 @@ defineShortcuts({
 
       <div v-else class="space-y-8 pb-24">
         <section v-for="group in groups" :key="group.key" :aria-label="group.label">
-          <div class="group/day mb-2.5 flex items-baseline gap-3">
+          <div class="mb-2.5 flex items-baseline gap-3">
             <h2 class="text-sm font-semibold text-highlighted">{{ group.label }}</h2>
             <span class="font-mono text-xs text-muted tabular-nums">{{ group.items.length }}</span>
             <UButton
@@ -243,8 +250,6 @@ defineShortcuts({
               size="xs"
               color="neutral"
               variant="ghost"
-              class="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/day:opacity-100"
-              :class="selectionActive ? 'opacity-100' : ''"
               @click="selectGroup(group.items.map((i) => i.id))"
             />
           </div>
