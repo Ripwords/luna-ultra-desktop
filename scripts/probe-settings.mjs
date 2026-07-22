@@ -15,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CODE, fieldVarint, LunaSession } from "./lib/ucd2.mjs";
-import { annotate, decodeRaw, renderRows, shortName } from "./lib/protobuf.mjs";
+import { annotate, decodeRaw, renderRows } from "./lib/protobuf.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(fs.readFileSync(path.join(here, "luna-protocol-schema.json"), "utf8"));
