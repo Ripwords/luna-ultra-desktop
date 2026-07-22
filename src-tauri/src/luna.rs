@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
 const UCD2_MAGIC: &[u8; 4] = b"UCD2";
@@ -24,6 +24,8 @@ const UCD2_FLAGS: u8 = 0x0c;
 const UCD2_FILE: u8 = 0x04;
 const UCD2_STREAM: u8 = 0x05;
 
+pub(crate) const CODE_START_LIVE_STREAM: u16 = 1;
+pub(crate) const CODE_STOP_LIVE_STREAM: u16 = 2;
 const CODE_GET_OPTIONS: u16 = 8;
 const CODE_DELETE_FILES: u16 = 12;
 const CODE_GET_CURRENT_CAPTURE_STATUS: u16 = 15;
@@ -78,7 +80,7 @@ fn wire_varint(mut value: u32) -> Vec<u8> {
     out
 }
 
-fn wire_field_varint(field: u32, value: u32) -> Vec<u8> {
+pub(crate) fn wire_field_varint(field: u32, value: u32) -> Vec<u8> {
     let mut out = wire_varint(field << 3);
     out.extend(wire_varint(value));
     out
@@ -132,7 +134,7 @@ fn build_file_command(seq: u8, code: u16, request_id: u16, body: &[u8]) -> Vec<u
 }
 
 #[derive(Debug, Clone)]
-struct RawResponse {
+pub(crate) struct RawResponse {
     /// Echoed command code; asserted in tests, carried for future status checks.
     #[allow(dead_code)]
     code: u16,
@@ -140,10 +142,22 @@ struct RawResponse {
     body: Vec<u8>,
 }
 
+/// A parsed UCD2 frame. FILE frames answer commands; STREAM frames are the
+/// keepalive hello (empty payload) or live video data.
+#[derive(Debug, Clone)]
+pub(crate) enum Frame {
+    File(RawResponse),
+    Stream(Vec<u8>),
+}
+
 /// Incremental UCD2 frame scanner over the receive buffer. Returns complete
-/// FILE responses and consumes processed bytes (STREAM frames are dropped).
-fn drain_frames(buffer: &mut Vec<u8>) -> Vec<RawResponse> {
-    let mut responses = Vec::new();
+/// frames and consumes processed bytes.
+///
+/// FILE and STREAM share one length formula: `12 + declared + 4`. The
+/// keepalive hello declares zero and is 16 bytes, so it is simply the
+/// degenerate case rather than a special case.
+fn drain_frames(buffer: &mut Vec<u8>) -> Vec<Frame> {
+    let mut frames = Vec::new();
     loop {
         let Some(start) = buffer.windows(4).position(|w| w == UCD2_MAGIC) else {
             buffer.clear();
@@ -152,38 +166,41 @@ fn drain_frames(buffer: &mut Vec<u8>) -> Vec<RawResponse> {
         if start > 0 {
             buffer.drain(..start);
         }
-        if buffer.len() < 8 {
+        if buffer.len() < 12 {
             break;
         }
         let frame_type = buffer[6];
-        let frame_len = if frame_type == UCD2_STREAM {
-            16
-        } else if frame_type == UCD2_FILE && buffer.len() >= 12 {
-            let raw_len = u32::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11]]) as usize;
-            12 + raw_len + 4
-        } else {
+        if frame_type != UCD2_FILE && frame_type != UCD2_STREAM {
             buffer.drain(..8);
             continue;
-        };
+        }
+        let declared = u32::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11]]) as usize;
+        // Guard against a corrupt length turning into an unbounded allocation
+        if declared > 8 * 1024 * 1024 {
+            buffer.drain(..8);
+            continue;
+        }
+        let frame_len = 12 + declared + 4;
         if buffer.len() < frame_len {
             break;
         }
         let frame: Vec<u8> = buffer.drain(..frame_len).collect();
-        if frame_type != UCD2_FILE {
+
+        if frame_type == UCD2_STREAM {
+            frames.push(Frame::Stream(frame[12..12 + declared].to_vec()));
             continue;
         }
-        let raw_len = u32::from_le_bytes([frame[8], frame[9], frame[10], frame[11]]) as usize;
-        if raw_len < 9 || frame.len() < 12 + raw_len {
+        if declared < 9 {
             continue;
         }
-        let raw = &frame[12..12 + raw_len];
-        responses.push(RawResponse {
+        let raw = &frame[12..12 + declared];
+        frames.push(Frame::File(RawResponse {
             code: u16::from_le_bytes([raw[0], raw[1]]),
             request_id: u16::from_le_bytes([raw[3], raw[4]]),
             body: raw[9..].to_vec(),
-        });
+        }));
     }
-    responses
+    frames
 }
 
 fn extract_ascii_strings(data: &[u8]) -> Vec<String> {
@@ -260,7 +277,7 @@ fn parse_device_info(host: &str, bodies: &[Vec<u8>]) -> LunaDeviceInfo {
     }
 }
 
-struct Session {
+pub(crate) struct Session {
     writer: Mutex<OwnedWriteHalf>,
     pending: Arc<StdMutex<HashMap<u16, oneshot::Sender<RawResponse>>>>,
     seq: AtomicU8,
@@ -268,6 +285,7 @@ struct Session {
     reader: StdMutex<Option<JoinHandle<()>>>,
     keepalive: StdMutex<Option<JoinHandle<()>>>,
     info: StdMutex<LunaDeviceInfo>,
+    stream_tx: broadcast::Sender<Vec<u8>>,
 }
 
 impl Session {
@@ -305,7 +323,13 @@ impl Session {
         }
     }
 
-    async fn send_command(&self, code: u16, body: &[u8], timeout: Duration) -> Result<RawResponse, String> {
+    /// Subscribe to live video payloads. Bounded: a slow consumer drops
+    /// frames rather than growing memory without limit.
+    pub(crate) fn subscribe_stream(&self) -> broadcast::Receiver<Vec<u8>> {
+        self.stream_tx.subscribe()
+    }
+
+    pub(crate) async fn send_command(&self, code: u16, body: &[u8], timeout: Duration) -> Result<RawResponse, String> {
         let request_id = self.next_request_id();
         let packet = build_file_command(self.next_seq(), code, request_id, body);
         self.send_packet(packet, request_id, timeout).await
@@ -333,6 +357,13 @@ impl Drop for Session {
 #[derive(Default)]
 pub struct LunaState {
     session: Arc<Mutex<Option<Arc<Session>>>>,
+}
+
+impl LunaState {
+    /// The live control session, if one is open.
+    pub(crate) async fn session(&self) -> Option<Arc<Session>> {
+        self.session.lock().await.as_ref().cloned()
+    }
 }
 
 fn small_options_body() -> Vec<u8> {
@@ -364,6 +395,8 @@ async fn open_session(app: AppHandle, state: Arc<Mutex<Option<Arc<Session>>>>, h
     let (mut read_half, write_half) = stream.into_split();
     let pending: Arc<StdMutex<HashMap<u16, oneshot::Sender<RawResponse>>>> = Arc::default();
 
+    let (stream_tx, _) = broadcast::channel::<Vec<u8>>(512);
+
     let session = Arc::new(Session {
         writer: Mutex::new(write_half),
         pending: Arc::clone(&pending),
@@ -372,6 +405,7 @@ async fn open_session(app: AppHandle, state: Arc<Mutex<Option<Arc<Session>>>>, h
         reader: StdMutex::new(None),
         keepalive: StdMutex::new(None),
         info: StdMutex::new(LunaDeviceInfo::default()),
+        stream_tx: stream_tx.clone(),
     });
 
     let reader_pending = pending;
@@ -383,9 +417,18 @@ async fn open_session(app: AppHandle, state: Arc<Mutex<Option<Arc<Session>>>>, h
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     buffer.extend_from_slice(&chunk[..n]);
-                    for response in drain_frames(&mut buffer) {
-                        if let Some(tx) = reader_pending.lock().unwrap().remove(&response.request_id) {
-                            let _ = tx.send(response);
+                    for frame in drain_frames(&mut buffer) {
+                        match frame {
+                            Frame::File(response) => {
+                                if let Some(tx) = reader_pending.lock().unwrap().remove(&response.request_id) {
+                                    let _ = tx.send(response);
+                                }
+                            }
+                            // Empty payloads are keepalive echoes, not video
+                            Frame::Stream(payload) if !payload.is_empty() => {
+                                let _ = stream_tx.send(payload);
+                            }
+                            Frame::Stream(_) => {}
                         }
                     }
                 }
@@ -545,8 +588,36 @@ mod tests {
         assert_eq!(&body[2..], "/DCIM/a.jpg".as_bytes());
     }
 
+    /// A STREAM frame carrying real video must be returned with its payload,
+    /// while the 16-byte keepalive hello must still be recognised and skipped.
     #[test]
-    fn drain_frames_parses_mock_response_shape() {
+    fn drain_frames_returns_stream_payloads() {
+        let payload = vec![0xAAu8; 40];
+        let mut frame_payload = Vec::new();
+        frame_payload.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        frame_payload.extend_from_slice(&payload);
+        frame_payload.extend_from_slice(&[0u8; 4]); // trailer
+        let mut buffer = build_ucd2(UCD2_STREAM, 1, &frame_payload);
+
+        // The keepalive hello declares zero length and is exactly 16 bytes
+        buffer.extend_from_slice(&build_stream_hello(2));
+
+        let frames = drain_frames(&mut buffer);
+        assert_eq!(frames.len(), 2, "expected the video frame and the hello");
+        match &frames[0] {
+            Frame::Stream(data) => assert_eq!(data, &payload),
+            other => panic!("expected a stream payload, got {other:?}"),
+        }
+        match &frames[1] {
+            Frame::Stream(data) => assert!(data.is_empty(), "hello carries no payload"),
+            other => panic!("expected the hello, got {other:?}"),
+        }
+        assert!(buffer.is_empty(), "both frames should be consumed");
+    }
+
+    /// The existing FILE parsing must be untouched by the refactor.
+    #[test]
+    fn drain_frames_still_parses_file_responses() {
         // Mirror of the mock server's buildRawResponse + buildUcd2
         let mut raw = Vec::new();
         raw.extend_from_slice(&12u16.to_le_bytes());
@@ -559,13 +630,17 @@ mod tests {
         payload.extend_from_slice(&raw);
         payload.extend_from_slice(&[0u8; 4]);
         let mut buffer = build_ucd2(UCD2_FILE, 9, &payload);
-        buffer.extend_from_slice(b"garbage");
 
-        let responses = drain_frames(&mut buffer);
-        assert_eq!(responses.len(), 1);
-        assert_eq!(responses[0].code, 12);
-        assert_eq!(responses[0].request_id, 7);
-        assert_eq!(responses[0].body, b"ok");
+        let frames = drain_frames(&mut buffer);
+        assert_eq!(frames.len(), 1);
+        match &frames[0] {
+            Frame::File(response) => {
+                assert_eq!(response.code, 12);
+                assert_eq!(response.request_id, 7);
+                assert_eq!(response.body, b"ok");
+            }
+            other => panic!("expected a file response, got {other:?}"),
+        }
     }
 
     /// End-to-end against the vendored luna_mock_server: our stream hello
@@ -639,8 +714,8 @@ mod tests {
                 .unwrap();
             assert!(n > 0, "mock closed the control socket");
             buffer.extend_from_slice(&chunk[..n]);
-            let mut responses = drain_frames(&mut buffer);
-            if let Some(response) = responses.pop() {
+            let mut frames = drain_frames(&mut buffer);
+            if let Some(Frame::File(response)) = frames.pop() {
                 break response;
             }
         };
@@ -686,8 +761,8 @@ mod tests {
                 .unwrap();
             assert!(n > 0);
             buffer.extend_from_slice(&chunk[..n]);
-            let mut responses = drain_frames(&mut buffer);
-            if let Some(response) = responses.pop() {
+            let mut frames = drain_frames(&mut buffer);
+            if let Some(Frame::File(response)) = frames.pop() {
                 break response;
             }
         };
