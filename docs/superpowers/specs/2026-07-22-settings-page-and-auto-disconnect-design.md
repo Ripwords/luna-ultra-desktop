@@ -159,62 +159,84 @@ answering while the socket still looks open.
 
 ---
 
-## 4. Visual and UX pass
+## 4. Layout and button placement
 
-**Design read**: a desktop product utility for prosumer photographers, in
-redesign-preserve mode, with a calm hardware-companion language, leaning on the
-existing Nuxt UI v4 token system rather than a new visual identity.
+No new visual identity, no font change, no palette change. The app keeps its
+Nuxt UI semantic tokens. This section is about where things sit on screen and
+which button goes where.
 
-Dials: `DESIGN_VARIANCE 4`, `MOTION_INTENSITY 3`, `VISUAL_DENSITY 6`. Product UI
-wants predictability over asymmetry, and the gallery is legitimately dense.
+### Rule applied everywhere
 
-The generated design-system recommendation (Orbitron display type, `#7C3AED`
-violet, "Exaggerated Minimalism") is rejected. It is a landing-page recipe, and
-the violet is exactly the AI-default accent the anti-slop rules ban. The app
-keeps its existing Nuxt UI semantic tokens.
+**One action row per surface, and destructive actions never sit flush against
+the action you actually want.** Right now Download and Delete are adjacent
+ghost buttons in the preview header, which is a mis-click waiting to happen on
+files that cannot be recovered.
 
-This is levers 1 to 4 of the redesign protocol (typography, spacing, color,
-motion) plus one recomposition (the home page, covered in section 2). No
-information architecture changes beyond adding `/settings`. No route renames.
+### Home
 
-### Global
+Currently the actions are split across two places: a Disconnect in the page
+navbar and Connect / View downloads inside the body form.
 
-- **One radius scale.** Audit every rounded utility across the components and
-  collapse to the Nuxt UI default scale. No `rounded-[2px]` marker inside a
-  `rounded-lg` container.
-- **One accent.** Semantic tokens only (`text-muted`, `text-highlighted`,
-  `bg-elevated`). No raw hex, no second accent introduced by the new page.
-- **Tabular figures** on every number that updates in place: download
-  percentages, byte counts, file counts, the RAW download progress line.
-- **Focus-visible rings** on every interactive element, including the
-  hand-rolled watermark position buttons, which are currently `<button>`
-  elements with no focus style.
-- **`prefers-reduced-motion`** honored by the `LunaModel` celebrate animation
-  and the loader spinners. Under reduced motion the celebrate is skipped and
-  spinners become a static indicator.
-- **Contrast checked in both themes.** Light and dark are opened side by side
-  before the work is called done, not inferred from one.
+- Remove the navbar Disconnect. The navbar keeps only the title and the sidebar
+  collapse toggle.
+- One action row in the body, left-aligned under the copy, primary first:
+  - disconnected: `Connect camera` (primary), `View downloads` (ghost)
+  - connected: `Open gallery` (primary), `Disconnect` (ghost, pushed to the
+    right of the row with a gap so it is not adjacent to the primary)
+- The 3D model column keeps its half of the split at `lg` and drops below the
+  copy on narrower windows, as it does now.
 
-### Per surface
+### Media preview
 
-- **Sidebar**: nav renders on one line at the narrowest collapsed and expanded
-  widths. Settings pinned at the bottom, visually separated from the three
-  primary destinations. The status chip becomes a link to `/settings`.
-- **Home**: covered in section 2. One primary CTA per state, CTA labels short
-  enough not to wrap.
-- **Gallery**: loading state becomes tile-shaped skeletons matching the grid
-  cell aspect, replacing bare spinners. An empty state that says the library is
-  empty and offers a refresh, rather than an empty grid.
-- **Downloads**: empty state and a failed-download row with an explicit retry
-  action.
-- **Settings**: labels above inputs, helper text present in markup, errors
-  below the related field, destructive action separated from the field group.
+Currently the header is `Download | Delete | Close` as three adjacent buttons
+in the top-right, and the prev/next arrows float over the image edges.
 
-### Copy audit
+- Header right becomes `Download` (outline, labeled), then a separator gap,
+  then `Close`. Delete moves out of the row into an overflow menu
+  (`i-lucide-ellipsis`) placed between them, so the destructive action takes
+  two deliberate clicks.
+- Filename and timestamp stay left-aligned in the header.
+- Prev/next arrows stay vertically centered but move inside the image area's
+  padding so they no longer overlap the image edge at wide aspect ratios.
 
-Every visible string across the changed surfaces is re-read before shipping.
-No em-dashes anywhere in user-visible text. No invented precision. No
-performative-craftsman section labels.
+### Gallery
+
+- **"Select day" is currently invisible until hover** (`opacity-0` until
+  `group-hover/day`). A hidden control that performs a real action should not
+  be hover-gated. It becomes always visible but quiet (ghost, small), sitting
+  to the right of the day heading and count.
+- Toolbar keeps filters on the left and the thumbnail-size group on the right,
+  which is the right split. The size buttons stay icon-only but keep their
+  existing `aria-label`s.
+- The loading state becomes tile-shaped skeleton cells in the actual grid
+  rather than a centered spinner, so the layout does not jump when the library
+  lands.
+- The floating `SelectionBar` keeps its `pb-24` scroll reserve so it never
+  covers the last row.
+
+### Downloads
+
+- Empty state gets the same centered icon plus copy plus action treatment the
+  gallery already uses, with a `Go to gallery` action.
+- A failed row gets an inline `Retry` button on the row itself, not in a global
+  toolbar.
+
+### Settings
+
+- Single column, `max-w-2xl`, sections separated by a heading plus a divider.
+  Not a two-column form; the fields are too few to justify it.
+- Labels above inputs, helper text below, full width within the column.
+- Each section's action sits at the section's bottom-right.
+- Camera section: the field group first, then a divider, then
+  Connect / Disconnect. Disconnect is visually separated from the input so it
+  is never the thing you hit while tabbing out of the host field.
+
+### Sidebar
+
+- Settings joins the nav list at the bottom, separated from the three primary
+  destinations by a spacer so it reads as secondary.
+- The camera status chip in the footer becomes a link to `/settings`, since it
+  is the thing users click when the connection looks wrong.
 
 ---
 
