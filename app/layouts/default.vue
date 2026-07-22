@@ -4,24 +4,33 @@ import type { NavigationMenuItem } from "@nuxt/ui";
 const { active } = useDownloads();
 const route = useRoute();
 
-const items = computed<NavigationMenuItem[]>(() => [
-  {
-    label: "Connect",
-    icon: "i-lucide-cable",
-    to: "/",
-    active: route.path === "/",
-  },
-  {
-    label: "Gallery",
-    icon: "i-lucide-images",
-    to: "/gallery",
-  },
-  {
-    label: "Downloads",
-    icon: "i-lucide-arrow-down-to-line",
-    to: "/downloads",
-    badge: active.value.length > 0 ? String(active.value.length) : undefined,
-  },
+const items = computed<NavigationMenuItem[][]>(() => [
+  [
+    {
+      label: "Connect",
+      icon: "i-lucide-cable",
+      to: "/",
+      active: route.path === "/",
+    },
+    {
+      label: "Gallery",
+      icon: "i-lucide-images",
+      to: "/gallery",
+    },
+    {
+      label: "Downloads",
+      icon: "i-lucide-arrow-down-to-line",
+      to: "/downloads",
+      badge: active.value.length > 0 ? String(active.value.length) : undefined,
+    },
+  ],
+  [
+    {
+      label: "Settings",
+      icon: "i-lucide-settings",
+      to: "/settings",
+    },
+  ],
 ]);
 </script>
 
@@ -47,7 +56,6 @@ const items = computed<NavigationMenuItem[]>(() => [
         <div class="flex w-full flex-col gap-3" :class="collapsed ? 'items-center' : ''">
           <UpdateBanner :collapsed="collapsed" />
           <CameraStatusChip :collapsed="collapsed" />
-          <ColorwayToggle :collapsed="collapsed" />
         </div>
       </template>
     </UDashboardSidebar>
