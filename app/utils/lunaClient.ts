@@ -107,6 +107,15 @@ export const lunaClient = {
     await tauriInvoke("luna_delete_files", { paths: cameraPaths });
   },
 
+  /** Send a raw protobuf body; returns the raw response body. */
+  async command(code: number, body: Uint8Array): Promise<Uint8Array> {
+    const response = await tauriInvoke<number[]>("luna_command", {
+      code,
+      body: Array.from(body),
+    });
+    return new Uint8Array(response);
+  },
+
   async liveViewStart(): Promise<{ url: string; port: number }> {
     return tauriInvoke<{ url: string; port: number }>("luna_liveview_start");
   },
