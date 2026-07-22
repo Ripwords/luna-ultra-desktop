@@ -1,4 +1,4 @@
-import type { CameraInfo, MediaItem, MediaStorage } from "~/types/media";
+import type { CameraInfo, LiveViewStats, MediaItem, MediaStorage } from "~/types/media";
 import { isTauri } from "~/utils/saveFile";
 import { extractCameraSubdirs, parseLunaIndex } from "~/utils/lunaIndex";
 import { reportCameraFailure, reportCameraSuccess } from "~/utils/cameraHealth";
@@ -105,6 +105,39 @@ export const lunaClient = {
 
   async deleteFiles(cameraPaths: string[]): Promise<void> {
     await tauriInvoke("luna_delete_files", { paths: cameraPaths });
+  },
+
+  async liveViewStart(): Promise<{ url: string; port: number }> {
+    return tauriInvoke<{ url: string; port: number }>("luna_liveview_start");
+  },
+
+  async liveViewStop(): Promise<void> {
+    if (isTauri()) await tauriInvoke("luna_liveview_stop");
+  },
+
+  async liveViewStats(): Promise<LiveViewStats> {
+    return tauriInvoke<LiveViewStats>("luna_liveview_stats");
+  },
+
+  /**
+   * Some Insta360 bodies expose an OSC MJPEG preview on port 80. If this
+   * camera does, it is a far simpler transport than the elementary stream,
+   * so it is tried first. Returns the URL on success, null otherwise.
+   */
+  async probeOscPreview(host: string): Promise<string | null> {
+    const url = baseUrl(host, "/osc/commands/execute");
+    try {
+      const response = await cameraFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json;charset=utf-8" },
+        body: JSON.stringify({ name: "camera.getLivePreview" }),
+      });
+      if (!response.ok) return null;
+      const type = response.headers.get("content-type") ?? "";
+      return type.includes("multipart") || type.includes("jpeg") ? url : null;
+    } catch {
+      return null;
+    }
   },
 
   /**

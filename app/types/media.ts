@@ -46,6 +46,14 @@ export interface CameraInfo {
   ssid?: string;
 }
 
+/** Live view counters, so a failed attempt can explain itself. */
+export interface LiveViewStats {
+  bytes: number;
+  frames: number;
+  firstBytesHex: string;
+  seconds: number;
+}
+
 export type DownloadStatus = "queued" | "downloading" | "done" | "error";
 
 export interface DownloadEntry {
