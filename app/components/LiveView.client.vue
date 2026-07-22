@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { buildCodecString, detectCodec, groupAccessUnits, splitNalUnits } from "~/utils/annexB";
+import { buildCodecString, detectCodec, drainAccessUnits, splitNalUnits } from "~/utils/annexB";
 import type { NalCodec } from "~/utils/annexB";
 
 const { active, starting, transport, streamUrl, error, diagnostics, note, start, stop } = useLiveView();
@@ -10,8 +10,11 @@ let abort: AbortController | null = null;
 
 /** Bytes that arrived mid-NAL and must be prepended to the next chunk. */
 let carry = new Uint8Array(0);
+/** Complete NAL units not yet proven to form a finished picture. */
+let pendingUnits: Uint8Array[] = [];
 let codec: NalCodec | null = null;
 let configured = false;
+let seenKeyframe = false;
 let timestamp = 0;
 
 function paint(frame: VideoFrame) {
@@ -46,19 +49,20 @@ async function consumeAnnexB(url: string) {
       carry = merged;
       continue;
     }
-    // The last unit may be incomplete; hold it back for the next chunk.
-    const complete = units.slice(0, -1);
+    // The last unit may be cut mid-NAL; hold its bytes back for the next read.
     const tail = units.at(-1)!;
     carry = new Uint8Array(4 + tail.length);
     carry.set([0, 0, 0, 1]);
     carry.set(tail, 4);
-    if (complete.length === 0) continue;
+    // Copy, so these views do not pin the whole merged buffer in memory
+    for (const unit of units.slice(0, -1)) pendingUnits.push(unit.slice());
+    if (pendingUnits.length === 0) continue;
 
-    codec ??= detectCodec(complete);
+    codec ??= detectCodec(pendingUnits);
     if (!codec) continue;
 
     if (!configured) {
-      const codecString = buildCodecString(complete, codec);
+      const codecString = buildCodecString(pendingUnits, codec);
       if (!codecString) continue;
       note(`Detected ${codec}, codec string ${codecString}.`);
       decoder = new VideoDecoder({
@@ -66,6 +70,9 @@ async function consumeAnnexB(url: string) {
         error: (cause) => {
           error.value = `Decoder error: ${cause.message}`;
           note(error.value);
+          // The decoder is closed now; stop reading instead of throwing on
+          // every subsequent chunk
+          abort?.abort();
         },
       });
       try {
@@ -80,10 +87,16 @@ async function consumeAnnexB(url: string) {
       configured = true;
     }
 
-    for (const unit of groupAccessUnits(complete, codec)) {
-      // Wait for a keyframe before feeding the decoder anything
-      if (!unit.key && timestamp === 0) continue;
-      decoder?.decode(
+    const { access, pending } = drainAccessUnits(pendingUnits, codec);
+    pendingUnits = pending;
+
+    for (const unit of access) {
+      // A decoder that has errored is closed; stop rather than throwing
+      if (decoder?.state !== "configured") return;
+      // Feeding delta frames before the first keyframe guarantees a failure
+      if (!unit.key && !seenKeyframe) continue;
+      if (unit.key) seenKeyframe = true;
+      decoder.decode(
         new EncodedVideoChunk({
           type: unit.key ? "key" : "delta",
           timestamp: timestamp,
@@ -105,8 +118,10 @@ function reset() {
   }
   decoder = null;
   carry = new Uint8Array(0);
+  pendingUnits = [];
   codec = null;
   configured = false;
+  seenKeyframe = false;
   timestamp = 0;
 }
 
@@ -115,6 +130,7 @@ watch([active, transport, streamUrl], async ([on, kind, url]) => {
     reset();
     return;
   }
+  reset();
   try {
     await consumeAnnexB(url);
   } catch (cause) {

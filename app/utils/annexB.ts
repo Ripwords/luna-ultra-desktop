@@ -173,6 +173,39 @@ function startsPicture(unit: Uint8Array, codec: NalCodec): boolean {
 }
 
 /**
+ * Streaming-safe wrapper around `groupAccessUnits`.
+ *
+ * Reads off the socket do not align with picture boundaries, so the trailing
+ * picture in any buffer may still be incomplete. Only pictures proven finished
+ * by the arrival of the *next* picture are emitted; everything from that next
+ * picture onward — including any parameter sets that precede it — stays
+ * pending. Flushing per read instead would emit headless fragments and drop
+ * parameter sets that arrived without a slice behind them.
+ */
+export function drainAccessUnits(
+  units: Uint8Array[],
+  codec: NalCodec,
+): { access: AccessUnit[]; pending: Uint8Array[] } {
+  const pictureStarts: number[] = [];
+  for (let i = 0; i < units.length; i++) {
+    const type = nalType(units[i]!, codec);
+    if (isVcl(type, codec) && startsPicture(units[i]!, codec)) pictureStarts.push(i);
+  }
+  // Fewer than two pictures means nothing is provably complete yet
+  if (pictureStarts.length < 2) return { access: [], pending: units };
+
+  // Parameter sets ahead of the last picture belong to it, so cut there
+  const cut = pictureStarts.at(-1)!;
+  let from = cut;
+  while (from > 0 && !isVcl(nalType(units[from - 1]!, codec), codec)) from--;
+
+  return {
+    access: groupAccessUnits(units.slice(0, from), codec),
+    pending: units.slice(from),
+  };
+}
+
+/**
  * Group NAL units into decodable access units, re-adding start codes.
  * Leading parameter sets are carried into the access unit that follows them,
  * which is what lets the decoder configure itself from the first keyframe.

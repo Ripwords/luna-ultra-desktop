@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCodecString,
   detectCodec,
+  drainAccessUnits,
   groupAccessUnits,
   nalType,
   splitNalUnits,
@@ -141,5 +142,52 @@ describe("groupAccessUnits", () => {
   it("returns nothing when no VCL NAL has arrived yet", () => {
     const units = splitNalUnits(annexB(H264_SPS, H264_PPS));
     expect(groupAccessUnits(units, "h264")).toEqual([]);
+  });
+});
+
+describe("drainAccessUnits", () => {
+  it("holds back the final picture, which may still be incomplete", () => {
+    const units = splitNalUnits(annexB(H265_IDR, H265_TRAIL));
+    const { access, pending } = drainAccessUnits(units, "h265");
+    expect(access).toHaveLength(1);
+    expect(access[0]!.key).toBe(true);
+    expect(pending).toHaveLength(1);
+  });
+
+  it("emits nothing until a second picture proves the first is complete", () => {
+    const units = splitNalUnits(annexB(H265_VPS, H265_SPS, H265_IDR));
+    const { access, pending } = drainAccessUnits(units, "h265");
+    expect(access).toEqual([]);
+    expect(pending).toHaveLength(3);
+  });
+
+  it("never drops parameter sets that arrive before any picture", () => {
+    const units = splitNalUnits(annexB(H265_VPS, H265_SPS));
+    const { access, pending } = drainAccessUnits(units, "h265");
+    expect(access).toEqual([]);
+    expect(pending).toHaveLength(2);
+  });
+
+  it("keeps parameter sets attached to the keyframe across a chunk split", () => {
+    // The regression: parameter sets and the IDR arriving in separate reads
+    const first = splitNalUnits(annexB(H265_VPS, H265_SPS));
+    const drainedFirst = drainAccessUnits(first, "h265");
+    expect(drainedFirst.access).toEqual([]);
+
+    const next = [...drainedFirst.pending, ...splitNalUnits(annexB(H265_IDR, H265_TRAIL))];
+    const { access } = drainAccessUnits(next, "h265");
+    expect(access).toHaveLength(1);
+    expect(access[0]!.key).toBe(true);
+    // VPS, SPS and the IDR slice must all be in that first access unit
+    expect(access[0]!.data.length).toBeGreaterThan(
+      H265_VPS.length + H265_SPS.length + H265_IDR.length,
+    );
+  });
+
+  it("reassembles a picture split across two reads into one access unit", () => {
+    const units = splitNalUnits(annexB(H265_IDR, H265_TRAIL, H265_TRAIL));
+    const { access, pending } = drainAccessUnits(units, "h265");
+    expect(access).toHaveLength(2);
+    expect(pending).toHaveLength(1);
   });
 });
