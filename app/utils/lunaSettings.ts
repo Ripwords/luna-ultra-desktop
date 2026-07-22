@@ -88,6 +88,17 @@ export async function readPhotographyOption(
   return (decoded.value as ProtoObject | undefined) ?? {};
 }
 
+/** Read back one device option, to verify a write the same way settings do. */
+export async function readDeviceOption(optionType: string): Promise<ProtoObject> {
+  const response = await lunaClient.command(
+    CODE_GET_OPTIONS,
+    encodeMessage(MSG.GetOptions, { option_types: [optionType] }),
+  );
+  if (response.length === 0) return {};
+  const decoded = decodeMessage(MSG.GetOptionsResp, response);
+  return (decoded.value as ProtoObject | undefined) ?? {};
+}
+
 export const readDeviceOptions = (): Promise<ProtoObject> =>
   readBatched(CODE_GET_OPTIONS, MSG.GetOptions, MSG.GetOptionsResp, OPTION_TYPE, {});
 

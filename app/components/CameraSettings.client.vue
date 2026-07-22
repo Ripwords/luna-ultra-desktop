@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { CONTROL_SECTIONS, type Control } from "~/utils/cameraControls";
 import { enumNames } from "~/utils/lunaProto";
+import type { ProtoValue } from "~/utils/lunaProto";
 
-const { settings, device, saving, status, load, update } = useCameraSettings();
+const { settings, device, saving, status, update, updateDevice } = useCameraSettings();
 
 /**
- * Several settings change nothing you can see in the preview, so each control
- * reports what the camera said when we read the value straight back.
+ * Each control reports what the camera said when the value was read straight
+ * back, because plenty of these change nothing you can see in the preview.
  */
 const VERDICTS = {
   applied: { icon: "i-lucide-check", color: "text-success", hint: "Read back from the camera" },
@@ -27,187 +29,94 @@ const verdict = (field: string) => {
   return entry ? { ...VERDICTS[entry.outcome], actual: entry.actual } : null;
 };
 
-/** Each control names the option type the camera expects for that field. */
-const pickers = [
-  {
-    label: "Exposure mode",
-    field: "exposure_mode",
-    option: "EXPOSURE_MODE",
-    values: "insta360.messages.PhotographyOptions.ExposureMode",
-  },
-  {
-    label: "White balance",
-    field: "white_balance",
-    option: "WHITE_BALANCE",
-    values: "insta360.messages.PhotographyOptions.WhiteBalance",
-  },
-  {
-    label: "Colour mode",
-    field: "color_mode",
-    option: "COLOR_MODE",
-    values: "insta360.messages.PhotographyOptions.COLOR_MODE",
-  },
-  {
-    label: "Gamma",
-    field: "gamma_mode",
-    option: "VIDEO_GAMMA_MODE",
-    values: "insta360.messages.GammaMode",
-  },
-  {
-    label: "Field of view",
-    field: "fov_type",
-    option: "FOV_TYPE",
-    values: "insta360.messages.PhotographyOptions.Fov_Type",
-  },
-  {
-    label: "Flicker",
-    field: "flicker",
-    option: "FLICKER",
-    values: "insta360.messages.Flicker",
-  },
-];
+const source = (control: Control) => (control.scope === "device" ? device : settings);
+const valueOf = (control: Control) => source(control).value[control.field];
 
-const sliders = [
-  { label: "EV bias", field: "exposure_bias", option: "EXPOSURE_BIAS", min: -4, max: 4, step: 1 },
-  { label: "Sharpness", field: "sharpness", option: "SHARPNESS", min: 0, max: 4, step: 1 },
-  {
-    label: "ISO ceiling",
-    field: "video_iso_top_limit",
-    option: "VIDEO_ISO_TOP_LIMIT",
-    min: 0,
-    max: 6400,
-    step: 100,
-  },
-];
+const options = (name: string) =>
+  enumNames(name).map((value) => ({ label: value.replace(/_/g, " "), value }));
 
-const options = (name: string) => enumNames(name).map((value) => ({ label: value, value }));
-
-/** The phone app exposes zoom as presets rather than a continuous slider. */
-const ZOOM_STEPS = [1, 2, 3, 6];
+const apply = (control: Control, value: ProtoValue) =>
+  control.scope === "device"
+    ? updateDevice(control.option, control.field, value)
+    : update(control.option, control.field, value);
 
 /**
- * Before the first read we know nothing, so enable everything rather than
+ * Before any read we know nothing, so leave everything enabled rather than
  * greying out controls that may well work.
  */
 const supported = computed(() => new Set((settings.value.$supported as string[] | undefined) ?? []));
-const isSupported = (option: string) => supported.value.size === 0 || supported.value.has(option);
+const isSupported = (control: Control) =>
+  control.scope === "device" || supported.value.size === 0 || supported.value.has(control.option);
 
-const battery = computed(() => {
-  const status = device.value.battery_status as Record<string, unknown> | undefined;
-  return typeof status?.battery_level === "number" ? status.battery_level : null;
-});
-
-const storage = computed(() => {
-  const state = device.value.storage_state as Record<string, unknown> | undefined;
-  if (typeof state?.free_space !== "number" || typeof state?.total_space !== "number") return null;
-  return { free: state.free_space / 1e9, total: state.total_space / 1e9 };
-});
-
-const modes = [
-  { label: "Video", value: "FUNCTION_MODE_NORMAL_VIDEO" },
-  { label: "Photo", value: "FUNCTION_MODE_NORMAL_IMAGE" },
-];
-
-const numberOf = (field: string, fallback: number) =>
-  typeof settings.value[field] === "number" ? (settings.value[field] as number) : fallback;
-
-/**
- * Enums decode to their name, but a value the schema does not cover decodes
- * to its number — the select still needs a string either way.
- */
-const stringOf = (field: string): string | undefined => {
-  const value = settings.value[field];
+const asString = (control: Control): string | undefined => {
+  const value = valueOf(control);
   return value === undefined ? undefined : String(value);
 };
 
-onMounted(() => void load());
+const asNumber = (control: Control): number => {
+  const value = valueOf(control);
+  return typeof value === "number" ? value : Number(value ?? 0);
+};
 </script>
 
 <template>
-  <div class="space-y-6">
-    <p class="text-xs font-medium tracking-wider text-dimmed">ADVANCED</p>
-    <div class="grid gap-4 sm:grid-cols-2">
-      <UFormField v-for="picker in pickers" :key="picker.field">
-        <template #label>
-          <span class="flex items-center gap-1.5">
-            {{ picker.label }}
-            <UIcon
-              v-if="verdict(picker.field)"
-              :name="verdict(picker.field)!.icon"
-              :class="verdict(picker.field)!.color"
-              class="size-3.5"
-              :title="verdict(picker.field)!.hint"
-            />
-          </span>
-        </template>
-        <USelect
-          :model-value="stringOf(picker.field)"
-          :items="options(picker.values)"
-          :disabled="!isSupported(picker.option) || saving === picker.field"
-          :loading="saving === picker.field"
-          class="w-full"
-          @update:model-value="(value: string) => update(picker.option, picker.field, value)"
-        />
-      </UFormField>
-    </div>
+  <div class="space-y-8">
+    <section v-for="section in CONTROL_SECTIONS" :key="section.title" class="space-y-3">
+      <h3 class="text-xs font-medium tracking-wider text-dimmed">
+        {{ section.title.toUpperCase() }}
+      </h3>
 
-    <UFormField>
-      <template #label>
-        <span class="flex items-center gap-1.5">
-          Zoom
-          <UIcon
-            v-if="verdict('zoom_scale')"
-            :name="verdict('zoom_scale')!.icon"
-            :class="verdict('zoom_scale')!.color"
-            class="size-3.5"
-            :title="verdict('zoom_scale')!.hint"
+      <div class="grid gap-4 sm:grid-cols-2">
+        <UFormField v-for="control in section.controls" :key="control.field" :help="control.hint">
+          <template #label>
+            <span class="flex items-center gap-1.5">
+              {{ control.label }}
+              <UIcon
+                v-if="verdict(control.field)"
+                :name="verdict(control.field)!.icon"
+                :class="verdict(control.field)!.color"
+                class="size-3.5"
+                :title="
+                  verdict(control.field)!.actual
+                    ? `${verdict(control.field)!.hint}: ${verdict(control.field)!.actual}`
+                    : verdict(control.field)!.hint
+                "
+              />
+            </span>
+          </template>
+
+          <USelect
+            v-if="control.kind === 'select'"
+            :model-value="asString(control)"
+            :items="options(control.values!)"
+            :disabled="!isSupported(control) || saving === control.field"
+            :loading="saving === control.field"
+            class="w-full"
+            @update:model-value="(value: string) => apply(control, value)"
           />
-        </span>
-      </template>
-      <div class="flex gap-2">
-        <UButton
-          v-for="step in ZOOM_STEPS"
-          :key="step"
-          :label="`${step}x`"
-          size="sm"
-          :color="numberOf('zoom_scale', 1) === step ? 'primary' : 'neutral'"
-          :variant="numberOf('zoom_scale', 1) === step ? 'solid' : 'subtle'"
-          :loading="saving === 'zoom_scale'"
-          @click="update('ZOOM_SCALE', 'zoom_scale', step)"
-        />
-      </div>
-    </UFormField>
 
-    <div class="grid gap-6 sm:grid-cols-2">
-      <UFormField
-        v-for="slider in sliders"
-        :key="slider.field"
-      >
-        <template #label>
-          <span class="flex items-center gap-1.5">
-            {{ slider.label }}: {{ settings[slider.field] ?? 0 }}
-            <UIcon
-              v-if="verdict(slider.field)"
-              :name="verdict(slider.field)!.icon"
-              :class="verdict(slider.field)!.color"
-              class="size-3.5"
-              :title="verdict(slider.field)!.hint"
+          <USwitch
+            v-else-if="control.kind === 'toggle'"
+            :model-value="Boolean(valueOf(control))"
+            :disabled="!isSupported(control) || saving === control.field"
+            @update:model-value="(value: boolean) => apply(control, value)"
+          />
+
+          <div v-else class="flex flex-wrap gap-1.5">
+            <UButton
+              v-for="step in control.steps"
+              :key="step.value"
+              :label="step.label"
+              size="xs"
+              :color="asNumber(control) === step.value ? 'primary' : 'neutral'"
+              :variant="asNumber(control) === step.value ? 'solid' : 'subtle'"
+              :disabled="!isSupported(control) || saving === control.field"
+              @click="apply(control, step.value)"
             />
-          </span>
-        </template>
-        <USlider
-          :model-value="numberOf(slider.field, slider.min)"
-          :min="slider.min"
-          :max="slider.max"
-          :step="slider.step"
-          :disabled="!isSupported(slider.option) || saving === slider.field"
-          @update:model-value="
-            (value: number | undefined) =>
-              value === undefined ? undefined : update(slider.option, slider.field, value)
-          "
-        />
-      </UFormField>
-    </div>
+          </div>
+        </UFormField>
+      </div>
+    </section>
 
     <details class="text-sm">
       <summary class="cursor-pointer text-muted">Everything the camera reported</summary>

@@ -1,8 +1,10 @@
 import type { ProtoObject, ProtoValue } from "~/utils/lunaProto";
 import {
+  readDeviceOption,
   readDeviceOptions,
   readPhotographyOption,
   readPhotographyOptions,
+  writeDeviceOptions,
   writePhotographyOptions,
 } from "~/utils/lunaSettings";
 
@@ -121,6 +123,42 @@ export function useCameraSettings() {
     }
   }
 
+  /** The same write-then-verify cycle, for options that live on the device. */
+  async function updateDevice(optionType: string, field: string, value: ProtoValue) {
+    const previous = device.value[field];
+    device.value = { ...device.value, [field]: value };
+    saving.value = field;
+    error.value = null;
+    try {
+      const accepted = await writeDeviceOptions([optionType], { [field]: value });
+      if (!accepted.includes(optionType)) {
+        device.value = { ...device.value, [field]: previous };
+        setStatus(field, { outcome: "rejected" });
+        error.value = `The camera did not accept ${field}.`;
+        return;
+      }
+      const after = await readDeviceOption(optionType);
+      const actual = after[field];
+      if (actual === undefined) {
+        setStatus(field, { outcome: "assumed" });
+        return;
+      }
+      device.value = { ...device.value, [field]: actual };
+      setStatus(
+        field,
+        matches(value, actual)
+          ? { outcome: "applied" }
+          : { outcome: "differs", actual: describe(actual) },
+      );
+    } catch (cause) {
+      device.value = { ...device.value, [field]: previous };
+      setStatus(field, { outcome: "rejected" });
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      saving.value = null;
+    }
+  }
+
   /**
    * Manual ISO and shutter only take effect in manual exposure mode, so set
    * the mode in the same breath rather than leaving the user to discover it.
@@ -152,6 +190,7 @@ export function useCameraSettings() {
     status,
     load,
     update,
+    updateDevice,
     setManualExposure,
   };
 }
