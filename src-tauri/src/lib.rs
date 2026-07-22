@@ -1,3 +1,4 @@
+mod liveview;
 mod luna;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -7,11 +8,15 @@ pub fn run() {
     .plugin(tauri_plugin_http::init())
     .plugin(tauri_plugin_process::init())
     .manage(luna::LunaState::default())
+    .manage(liveview::LiveViewState::default())
     .invoke_handler(tauri::generate_handler![
       luna::luna_connect,
       luna::luna_disconnect,
       luna::luna_status,
       luna::luna_delete_files,
+      liveview::luna_liveview_start,
+      liveview::luna_liveview_stop,
+      liveview::luna_liveview_stats,
     ])
     .setup(|app| {
       // Auto-updater (desktop only)
