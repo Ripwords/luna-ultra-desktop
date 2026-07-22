@@ -67,6 +67,27 @@ export const readPhotographyOptions = (mode: string): Promise<ProtoObject> =>
     { function_mode: mode },
   );
 
+/**
+ * Read back a single option. Used to verify a write actually landed: the
+ * camera's `success_types` echo says it accepted the request, which is not
+ * the same as having applied it.
+ */
+export async function readPhotographyOption(
+  mode: string,
+  optionType: string,
+): Promise<ProtoObject> {
+  const response = await lunaClient.command(
+    CODE_GET_PHOTOGRAPHY_OPTIONS,
+    encodeMessage(MSG.GetPhotographyOptions, {
+      option_types: [optionType],
+      function_mode: mode,
+    }),
+  );
+  if (response.length === 0) return {};
+  const decoded = decodeMessage(MSG.GetPhotographyOptionsResp, response);
+  return (decoded.value as ProtoObject | undefined) ?? {};
+}
+
 export const readDeviceOptions = (): Promise<ProtoObject> =>
   readBatched(CODE_GET_OPTIONS, MSG.GetOptions, MSG.GetOptionsResp, OPTION_TYPE, {});
 

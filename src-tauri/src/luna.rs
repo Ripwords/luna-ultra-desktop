@@ -162,7 +162,9 @@ pub(crate) struct RawResponse {
 #[derive(Debug, Clone)]
 pub(crate) enum Frame {
     File(RawResponse),
-    Stream(Vec<u8>),
+    /// Keepalive echo. Carries no payload we use — the probe proved video
+    /// rides MEDIA frames, never these.
+    Stream,
     Media { substream: u8, data: Vec<u8> },
 }
 
@@ -203,7 +205,7 @@ fn drain_frames(buffer: &mut Vec<u8>) -> Vec<Frame> {
         let frame: Vec<u8> = buffer.drain(..frame_len).collect();
 
         if frame_type == UCD2_STREAM {
-            frames.push(Frame::Stream(frame[12..12 + declared].to_vec()));
+            frames.push(Frame::Stream);
             continue;
         }
         if frame_type == UCD2_MEDIA {
@@ -457,7 +459,7 @@ async fn open_session(app: AppHandle, state: Arc<Mutex<Option<Arc<Session>>>>, h
                             // Secondary preview and gyro substreams are ignored
                             Frame::Media { .. } => {}
                             // STREAM frames are keepalive echoes, never video
-                            Frame::Stream(_) => {}
+                            Frame::Stream => {}
                         }
                     }
                 }
@@ -651,29 +653,21 @@ mod tests {
     }
 
     /// A STREAM frame carrying real video must be returned with its payload,
-    /// while the 16-byte keepalive hello must still be recognised and skipped.
+    /// STREAM frames are keepalive echoes only. Both a padded one and the
+    /// 16-byte hello must be recognised and fully consumed, so that a MEDIA
+    /// frame arriving behind them still parses.
     #[test]
-    fn drain_frames_returns_stream_payloads() {
-        let payload = vec![0xAAu8; 40];
-        let mut frame_payload = Vec::new();
-        frame_payload.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-        frame_payload.extend_from_slice(&payload);
-        frame_payload.extend_from_slice(&[0u8; 4]); // trailer
-        let mut buffer = build_ucd2(UCD2_STREAM, 1, &frame_payload);
-
-        // The keepalive hello declares zero length and is exactly 16 bytes
+    fn drain_frames_consumes_stream_frames_without_payload() {
+        let mut padded = Vec::new();
+        padded.extend_from_slice(&40u32.to_le_bytes());
+        padded.extend_from_slice(&[0xAAu8; 40]);
+        padded.extend_from_slice(&[0u8; 4]); // trailer
+        let mut buffer = build_ucd2(UCD2_STREAM, 1, &padded);
         buffer.extend_from_slice(&build_stream_hello(2));
 
         let frames = drain_frames(&mut buffer);
-        assert_eq!(frames.len(), 2, "expected the video frame and the hello");
-        match &frames[0] {
-            Frame::Stream(data) => assert_eq!(data, &payload),
-            other => panic!("expected a stream payload, got {other:?}"),
-        }
-        match &frames[1] {
-            Frame::Stream(data) => assert!(data.is_empty(), "hello carries no payload"),
-            other => panic!("expected the hello, got {other:?}"),
-        }
+        assert_eq!(frames.len(), 2);
+        assert!(frames.iter().all(|f| matches!(f, Frame::Stream)));
         assert!(buffer.is_empty(), "both frames should be consumed");
     }
 

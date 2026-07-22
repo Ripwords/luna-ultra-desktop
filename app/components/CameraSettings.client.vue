@@ -1,7 +1,31 @@
 <script setup lang="ts">
 import { enumNames } from "~/utils/lunaProto";
 
-const { settings, device, mode, loading, saving, error, load, update } = useCameraSettings();
+const { settings, device, mode, loading, saving, error, status, load, update } = useCameraSettings();
+
+/**
+ * Several settings change nothing you can see in the preview, so each control
+ * reports what the camera said when we read the value straight back.
+ */
+const VERDICTS = {
+  applied: { icon: "i-lucide-check", color: "text-success", hint: "Read back from the camera" },
+  differs: {
+    icon: "i-lucide-arrow-left-right",
+    color: "text-warning",
+    hint: "Camera chose a different value",
+  },
+  assumed: {
+    icon: "i-lucide-circle-help",
+    color: "text-muted",
+    hint: "Camera reported nothing — this is its default",
+  },
+  rejected: { icon: "i-lucide-x", color: "text-error", hint: "Camera refused it" },
+} as const;
+
+const verdict = (field: string) => {
+  const entry = status.value[field];
+  return entry ? { ...VERDICTS[entry.outcome], actual: entry.actual } : null;
+};
 
 /** Each control names the option type the camera expects for that field. */
 const pickers = [
@@ -45,7 +69,6 @@ const pickers = [
 
 const sliders = [
   { label: "EV bias", field: "exposure_bias", option: "EXPOSURE_BIAS", min: -4, max: 4, step: 1 },
-  { label: "Zoom", field: "zoom_scale", option: "ZOOM_SCALE", min: 1, max: 12, step: 0.5 },
   { label: "Sharpness", field: "sharpness", option: "SHARPNESS", min: 0, max: 4, step: 1 },
   {
     label: "ISO ceiling",
@@ -58,6 +81,9 @@ const sliders = [
 ];
 
 const options = (name: string) => enumNames(name).map((value) => ({ label: value, value }));
+
+/** The phone app exposes zoom as presets rather than a continuous slider. */
+const ZOOM_STEPS = [1, 2, 3, 6];
 
 /**
  * Before the first read we know nothing, so enable everything rather than
@@ -130,7 +156,19 @@ onMounted(() => void load());
     />
 
     <div class="grid gap-4 sm:grid-cols-2">
-      <UFormField v-for="picker in pickers" :key="picker.field" :label="picker.label">
+      <UFormField v-for="picker in pickers" :key="picker.field">
+        <template #label>
+          <span class="flex items-center gap-1.5">
+            {{ picker.label }}
+            <UIcon
+              v-if="verdict(picker.field)"
+              :name="verdict(picker.field)!.icon"
+              :class="verdict(picker.field)!.color"
+              class="size-3.5"
+              :title="verdict(picker.field)!.hint"
+            />
+          </span>
+        </template>
         <USelect
           :model-value="stringOf(picker.field)"
           :items="options(picker.values)"
@@ -142,12 +180,50 @@ onMounted(() => void load());
       </UFormField>
     </div>
 
+    <UFormField>
+      <template #label>
+        <span class="flex items-center gap-1.5">
+          Zoom
+          <UIcon
+            v-if="verdict('zoom_scale')"
+            :name="verdict('zoom_scale')!.icon"
+            :class="verdict('zoom_scale')!.color"
+            class="size-3.5"
+            :title="verdict('zoom_scale')!.hint"
+          />
+        </span>
+      </template>
+      <div class="flex gap-2">
+        <UButton
+          v-for="step in ZOOM_STEPS"
+          :key="step"
+          :label="`${step}x`"
+          size="sm"
+          :color="numberOf('zoom_scale', 1) === step ? 'primary' : 'neutral'"
+          :variant="numberOf('zoom_scale', 1) === step ? 'solid' : 'subtle'"
+          :loading="saving === 'zoom_scale'"
+          @click="update('ZOOM_SCALE', 'zoom_scale', step)"
+        />
+      </div>
+    </UFormField>
+
     <div class="grid gap-6 sm:grid-cols-2">
       <UFormField
         v-for="slider in sliders"
         :key="slider.field"
-        :label="`${slider.label}: ${settings[slider.field] ?? 0}`"
       >
+        <template #label>
+          <span class="flex items-center gap-1.5">
+            {{ slider.label }}: {{ settings[slider.field] ?? 0 }}
+            <UIcon
+              v-if="verdict(slider.field)"
+              :name="verdict(slider.field)!.icon"
+              :class="verdict(slider.field)!.color"
+              class="size-3.5"
+              :title="verdict(slider.field)!.hint"
+            />
+          </span>
+        </template>
         <USlider
           :model-value="numberOf(slider.field, slider.min)"
           :min="slider.min"
