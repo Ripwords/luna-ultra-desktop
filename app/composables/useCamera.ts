@@ -117,7 +117,17 @@ export function useCamera() {
     loadingLibrary.value = true;
     error.value = null;
     try {
-      library.value = await lunaClient.listMedia(host.value);
+      // The camera authorizes its HTTP media index ~700ms AFTER the control
+      // session's STREAM hello, so a fresh connect can read an unauthorized
+      // (empty) index and wrongly show "Nothing here" while staying connected.
+      // Retry a few times before believing the library is genuinely empty.
+      let items = await lunaClient.listMedia(host.value);
+      for (let attempt = 0; items.length === 0 && attempt < 4 && isConnected.value; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        if (!isConnected.value) break;
+        items = await lunaClient.listMedia(host.value);
+      }
+      library.value = items;
     } catch (e) {
       error.value = e instanceof Error ? e.message : "Failed to read the media library.";
     } finally {
