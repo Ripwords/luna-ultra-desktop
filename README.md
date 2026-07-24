@@ -32,6 +32,7 @@ Connect over Wi-Fi to browse the camera's media library, batch-download photos a
 ## Features
 
 - **Real camera connection** — pairs with the Luna Ultra over its Wi-Fi network using the camera's own TCP control protocol and HTTP media index. No mock data.
+- **Camera control** — a live viewfinder with a heads-up display (recording time, storage, resolution, battery), quick exposure controls (ISO, shutter, EV, white balance), and one-tap photo/video capture.
 - **Gallery** — date-grouped grid with photo/video filtering, three thumbnail sizes, and a full-screen preview with metadata and keyboard navigation.
 - **Multi-select** — click to toggle, shift-click for ranges, per-day select, and select-all. A floating action bar drives downloads and deletes.
 - **Downloads** — a background queue with per-file progress, streamed straight from the camera to your Downloads folder.
@@ -42,6 +43,10 @@ Connect over Wi-Fi to browse the camera's media library, batch-download photos a
 - **Auto-updates** — signed delta updates delivered from GitHub Releases.
 
 ## Screenshots
+
+**Camera control** — a live viewfinder with HUD, quick exposure controls, and capture.
+
+![Camera control](screenshots/08-camera.png)
 
 **Connect & 3D showpiece** — pair the camera and inspect it as a hi-fi 3D model.
 
