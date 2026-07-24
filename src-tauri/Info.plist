@@ -9,5 +9,9 @@
   -->
   <key>NSLocalNetworkUsageDescription</key>
   <string>Luna Ultra Desktop connects to your Insta360 Luna Ultra camera over your local Wi-Fi network to browse and download your photos and videos.</string>
+  <!-- The app saves downloaded media into ~/Downloads/Luna Ultra, which macOS
+       gates behind a one-time Downloads-folder prompt. -->
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Luna Ultra Desktop saves the photos and videos you download from your camera into your Downloads folder.</string>
 </dict>
 </plist>
