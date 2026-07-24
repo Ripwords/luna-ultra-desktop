@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { withCameraSlot, CAMERA_PRIORITY, CAMERA_CONCURRENCY } from "~/utils/cameraQueue";
+import {
+  withCameraSlot,
+  CAMERA_PRIORITY,
+  CAMERA_CONCURRENCY,
+  setCameraQueuePaused,
+} from "~/utils/cameraQueue";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -49,5 +54,44 @@ describe("withCameraSlot", () => {
     })).rejects.toThrow("boom");
     // A subsequent task still runs (slot was released).
     await expect(withCameraSlot(async () => 42)).resolves.toBe(42);
+  });
+
+  it("re-evaluates function priorities so the pick follows the latest score", async () => {
+    const order: string[] = [];
+    const blockers = Array.from({ length: CAMERA_CONCURRENCY }, () => deferred<void>());
+    const held = blockers.map((b) => withCameraSlot(() => b.promise));
+
+    // Two thumbnails whose priority is a live function; "near" reports closer to
+    // the viewport (higher score) only after it's queued, mimicking a scroll.
+    let nearScore = -100;
+    const far = withCameraSlot(async () => {
+      order.push("far");
+    }, () => -50);
+    const near = withCameraSlot(async () => {
+      order.push("near");
+    }, () => nearScore);
+
+    nearScore = -1; // "near" scrolls into view before the slots free
+    for (const b of blockers) b.resolve();
+    await Promise.all([...held, far, near]);
+    expect(order[0]).toBe("near");
+  });
+
+  it("holds back sub-preview work while paused, and PREVIEW still runs", async () => {
+    const order: string[] = [];
+    setCameraQueuePaused(true);
+    const thumb = withCameraSlot(async () => {
+      order.push("thumb");
+    }, CAMERA_PRIORITY.THUMBNAIL);
+    const preview = withCameraSlot(async () => {
+      order.push("preview");
+    }, CAMERA_PRIORITY.PREVIEW);
+
+    await preview; // runs despite the pause
+    expect(order).toEqual(["preview"]);
+
+    setCameraQueuePaused(false);
+    await thumb; // resumes once unpaused
+    expect(order).toEqual(["preview", "thumb"]);
   });
 });

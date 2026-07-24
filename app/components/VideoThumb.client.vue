@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
+import { withCameraSlot, CAMERA_PRIORITY, viewportPriority } from "~/utils/cameraQueue";
 
 /**
  * Video thumbnail: a real <video> element on the camera's HTTP URL, seeked to
@@ -83,7 +83,7 @@ function queueAttempt() {
           if (state.value !== "loaded") onError();
         }, 15_000);
       }),
-    CAMERA_PRIORITY.THUMBNAIL,
+    props.eager ? CAMERA_PRIORITY.PREVIEW : () => viewportPriority(el.value),
   );
 }
 

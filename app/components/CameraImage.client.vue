@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cameraFetch } from "~/utils/lunaClient";
 import { imageMimeFor } from "~/utils/media";
-import { withCameraSlot, CAMERA_PRIORITY } from "~/utils/cameraQueue";
+import { withCameraSlot, CAMERA_PRIORITY, viewportPriority } from "~/utils/cameraQueue";
 import { cachedMedia } from "~/utils/mediaCache";
 
 /**
@@ -45,8 +45,9 @@ let observer: IntersectionObserver | null = null;
 async function load() {
   if (state.value !== "idle") return;
   state.value = "loading";
-  // Full-screen views (eager) outrank background grid thumbnails for the camera.
-  const priority = props.eager ? CAMERA_PRIORITY.PREVIEW : CAMERA_PRIORITY.THUMBNAIL;
+  // Full-screen views (eager) outrank grid thumbnails; a thumbnail's priority
+  // tracks its live distance to the viewport so loading follows the scroll.
+  const priority = props.eager ? CAMERA_PRIORITY.PREVIEW : () => viewportPriority(el.value);
   try {
     // The camera slot is taken inside the loader so a cache hit never queues
     // behind live camera traffic.

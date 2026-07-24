@@ -11,8 +11,10 @@
  *
  * The slot is held for the WHOLE transfer — fetch AND body read — because the
  * camera connection isn't free until the body has been consumed. Callers pass a
- * function that does both. Higher-priority work (an opened full-screen preview)
- * drains ahead of background grid thumbnails.
+ * function that does both. A task's priority may be a fixed number or a function
+ * re-evaluated every time the queue picks the next task, so a grid thumbnail can
+ * report how close it is to the viewport *now* — that's what makes loading
+ * follow the scroll instead of the order tiles happened to mount.
  */
 export const CAMERA_PRIORITY = { THUMBNAIL: 0, LISTING: 1, PREVIEW: 2 } as const;
 
@@ -23,22 +25,49 @@ export const CAMERA_PRIORITY = { THUMBNAIL: 0, LISTING: 1, PREVIEW: 2 } as const
  */
 export const CAMERA_CONCURRENCY = 4;
 
+/** A fixed priority, or one re-evaluated each time the queue picks a task. */
+export type CameraPriority = number | (() => number);
+
 interface QueuedTask {
-  priority: number;
+  priority: CameraPriority;
   run: () => Promise<unknown>;
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
 }
 
 let active = 0;
+let paused = false;
 const queue: QueuedTask[] = [];
+
+const scoreOf = (priority: CameraPriority): number =>
+  typeof priority === "function" ? priority() : priority;
+
+/**
+ * While a full-screen preview is open, hold back background grid thumbnails so
+ * the camera's single connection serves the opened photo/video first. Loads at
+ * PREVIEW priority (the opened item, and prev/next) still run.
+ */
+export function setCameraQueuePaused(value: boolean): void {
+  paused = value;
+  if (!value) drain();
+}
 
 function drain(): void {
   while (active < CAMERA_CONCURRENCY && queue.length > 0) {
-    let best = 0;
-    for (let i = 1; i < queue.length; i++) {
-      if (queue[i]!.priority > queue[best]!.priority) best = i;
+    // Pick the highest-priority runnable task, re-scoring dynamic priorities so
+    // the pick reflects the current scroll position.
+    let best = -1;
+    let bestScore = -Infinity;
+    for (let i = 0; i < queue.length; i++) {
+      const score = scoreOf(queue[i]!.priority);
+      if (paused && score < CAMERA_PRIORITY.PREVIEW) continue;
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
     }
+    if (best === -1) break; // everything runnable is held back by the pause
+
     const task = queue.splice(best, 1)[0]!;
     active++;
     task
@@ -55,7 +84,7 @@ function drain(): void {
  * Run `fn` while holding one of the limited camera slots. `fn` must perform the
  * entire transfer (fetch + body read) so the slot covers the whole download.
  */
-export function withCameraSlot<T>(fn: () => Promise<T>, priority: number = CAMERA_PRIORITY.THUMBNAIL): Promise<T> {
+export function withCameraSlot<T>(fn: () => Promise<T>, priority: CameraPriority = CAMERA_PRIORITY.THUMBNAIL): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     queue.push({
       priority,
@@ -65,4 +94,17 @@ export function withCameraSlot<T>(fn: () => Promise<T>, priority: number = CAMER
     });
     drain();
   });
+}
+
+/**
+ * Priority for a grid thumbnail from how close it sits to the viewport centre
+ * right now: 0 at the centre, sliding negative with distance, so the closest
+ * un-loaded tile is always picked next. Stays below LISTING/PREVIEW, and below
+ * off-screen tiles the moment they scroll away.
+ */
+export function viewportPriority(el: HTMLElement | null): number {
+  if (!el || typeof window === "undefined") return CAMERA_PRIORITY.THUMBNAIL;
+  const rect = el.getBoundingClientRect();
+  const tileCenter = rect.top + rect.height / 2;
+  return -Math.abs(tileCenter - window.innerHeight / 2) / 10000;
 }

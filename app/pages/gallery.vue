@@ -4,6 +4,7 @@ import DownloadOptionsModal from "~/components/DownloadOptionsModal.vue";
 import type { MediaItem } from "~/types/media";
 import type { MediaFilter, StorageFilter, ThumbSize } from "~/composables/useGallery";
 import { isEquirectangular } from "~/utils/media";
+import { setCameraQueuePaused } from "~/utils/cameraQueue";
 
 useHead({ title: "Gallery" });
 
@@ -63,6 +64,11 @@ const allById = computed(() => {
 // Fullscreen preview state
 const previewOpen = ref(false);
 const previewId = ref<string | null>(null);
+
+// While an item is open full-screen, hold back background grid thumbnails so
+// the camera's single connection loads the opened photo/video first.
+watch(previewOpen, (open) => setCameraQueuePaused(open));
+onBeforeUnmount(() => setCameraQueuePaused(false));
 const previewItem = computed(() => (previewId.value ? (allById.value.get(previewId.value) ?? null) : null));
 const previewIndex = computed(() => (previewId.value ? orderedIds.value.indexOf(previewId.value) : -1));
 
