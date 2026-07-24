@@ -9,7 +9,7 @@ const { modes, modeId, isPhoto, recording, elapsedLabel, busy, error, selectMode
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-2">
     <div class="flex justify-center gap-1 overflow-x-auto">
       <button
         v-for="mode in modes"

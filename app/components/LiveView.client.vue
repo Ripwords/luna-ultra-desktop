@@ -2,7 +2,9 @@
 import { buildCodecString, detectCodec, drainAccessUnits, splitNalUnits } from "~/utils/annexB";
 import type { NalCodec } from "~/utils/annexB";
 
-const { active, starting, transport, streamUrl, error, diagnostics, note, start, stop } = useLiveView();
+// The page owns starting and stopping the stream; this component is just the
+// decoding surface for whatever the live-view composable is currently serving.
+const { active, transport, streamUrl, error, note, stop } = useLiveView();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 let decoder: VideoDecoder | null = null;
@@ -68,11 +70,13 @@ async function consumeAnnexB(url: string) {
       decoder = new VideoDecoder({
         output: paint,
         error: (cause) => {
-          error.value = `Decoder error: ${cause.message}`;
-          note(error.value);
-          // The decoder is closed now; stop reading instead of throwing on
-          // every subsequent chunk
-          abort?.abort();
+          // A decode error — a garbled or dropped frame after a while, or an
+          // HEVC frame the platform choked on — used to abort the whole stream
+          // and end the preview for good. Instead drop just the decode pipeline
+          // and keep reading: the loop reconfigures a fresh decoder from the
+          // next keyframe, so a glitch is a brief blip rather than the end.
+          note(`Decoder error, resyncing at next keyframe: ${cause.message}`);
+          resetDecoderState();
         },
       });
       try {
@@ -91,8 +95,10 @@ async function consumeAnnexB(url: string) {
     pendingUnits = pending;
 
     for (const unit of access) {
-      // A decoder that has errored is closed; stop rather than throwing
-      if (decoder?.state !== "configured") return;
+      // The decoder may have just been reset (e.g. after an error). Stop
+      // feeding this batch and let the next keyframe reconfigure it, rather
+      // than ending the read loop.
+      if (decoder?.state !== "configured") break;
       // Feeding delta frames before the first keyframe guarantees a failure
       if (!unit.key && !seenKeyframe) continue;
       if (unit.key) seenKeyframe = true;
@@ -111,18 +117,28 @@ async function consumeAnnexB(url: string) {
 function reset() {
   abort?.abort();
   abort = null;
+  resetDecoderState();
+  carry = new Uint8Array(0);
+  timestamp = 0;
+}
+
+/**
+ * Tear down only the decode pipeline, leaving the fetch running. This is what
+ * lets a decoder error recover: the read loop keeps pulling bytes and builds a
+ * fresh decoder from the next keyframe's parameter sets. `carry` and
+ * `timestamp` are deliberately left intact so timestamps never jump backwards.
+ */
+function resetDecoderState() {
   try {
     decoder?.close();
   } catch {
     // Already closed; nothing to do
   }
   decoder = null;
-  carry = new Uint8Array(0);
   pendingUnits = [];
   codec = null;
   configured = false;
   seenKeyframe = false;
-  timestamp = 0;
 }
 
 watch([active, transport, streamUrl], async ([on, kind, url]) => {
@@ -147,39 +163,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div class="flex items-center gap-3">
-      <UButton
-        :label="active ? 'Stop live view' : 'Start live view'"
-        :loading="starting"
-        :icon="active ? 'i-lucide-square' : 'i-lucide-video'"
-        color="primary"
-        @click="active ? stop() : start()"
-      />
-      <span v-if="transport" class="text-sm text-muted">
-        transport: {{ transport }}
-      </span>
-    </div>
-
-    <UAlert
-      v-if="error"
-      icon="i-lucide-triangle-alert"
-      color="warning"
-      variant="subtle"
-      :title="error"
-    />
-
-    <div class="overflow-hidden rounded-lg bg-elevated">
-      <img v-if="active && transport === 'mjpeg' && streamUrl" :src="streamUrl" class="w-full" >
-      <canvas v-show="active && transport === 'annexb'" ref="canvas" class="w-full" />
-      <p v-if="!active" class="p-8 text-center text-sm text-muted">
-        Live view is stopped.
-      </p>
-    </div>
-
-    <details v-if="diagnostics.length > 0" class="text-sm">
-      <summary class="cursor-pointer text-muted">Diagnostics</summary>
-      <pre class="mt-2 overflow-x-auto rounded bg-elevated p-3 text-xs">{{ diagnostics.join("\n") }}</pre>
-    </details>
+  <div class="size-full">
+    <img
+      v-if="active && transport === 'mjpeg' && streamUrl"
+      :src="streamUrl"
+      class="size-full object-contain"
+    >
+    <canvas v-show="active && transport === 'annexb'" ref="canvas" class="size-full object-contain" />
   </div>
 </template>
