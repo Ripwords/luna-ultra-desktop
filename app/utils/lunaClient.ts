@@ -1,13 +1,32 @@
 import type { CameraInfo, LiveViewStats, MediaItem, MediaStorage } from "~/types/media";
 import { isTauri } from "~/utils/saveFile";
-import { extractCameraSubdirs, parseLunaIndex } from "~/utils/lunaIndex";
+import { buildMediaItems, entriesFromPaths } from "~/utils/lunaIndex";
 import { reportCameraFailure, reportCameraSuccess } from "~/utils/cameraHealth";
+import { concatBytes, decodeRaw, encodeTag, encodeVarint, WIRE_VARINT } from "~/utils/protobuf";
 
 /** Storage roots the Luna Ultra exposes over HTTP, default first. */
 const STORAGE_ROOTS: Array<{ path: string; id: MediaStorage }> = [
   { path: "/storage_internal/DCIM/", id: "internal" },
   { path: "/DCIM/", id: "sdcard" },
 ];
+
+/**
+ * GET_FILE_LIST (control-session command 13) enumerates media. Firmware 1.0.238
+ * disabled the HTTP directory autoindex the app used to scrape, but individual
+ * files stay fetchable by URL while the session is held.
+ */
+const CODE_GET_FILE_LIST = 13;
+/** GetFileList.media_type: 2 = both photos and videos. */
+const MEDIA_VIDEO_AND_PHOTO = 2;
+
+/** GetFileList request body — media_type, start, limit, all varint fields. */
+function fileListBody(mediaType: number, start: number, limit: number): Uint8Array {
+  return concatBytes([
+    [...encodeTag(1, WIRE_VARINT), ...encodeVarint(mediaType)],
+    [...encodeTag(2, WIRE_VARINT), ...encodeVarint(start)],
+    [...encodeTag(3, WIRE_VARINT), ...encodeVarint(limit)],
+  ]);
+}
 
 interface RawDeviceInfo {
   host: string;
@@ -154,38 +173,27 @@ export const lunaClient = {
    * subdirectories. Requires a live control session (it authorizes HTTP).
    */
   async listMedia(host: string): Promise<MediaItem[]> {
-    const items: MediaItem[] = [];
-    const seen = new Set<string>();
-    for (const storage of STORAGE_ROOTS) {
-      const rootUrl = baseUrl(host, storage.path);
-      let rootHtml: string;
-      try {
-        const response = await cameraFetch(rootUrl, { headers: { "Cache-Control": "no-cache" } });
-        if (!response.ok) continue;
-        rootHtml = await response.text();
-      } catch {
-        continue;
-      }
-
-      const subdirs = extractCameraSubdirs(rootHtml);
-      // Some firmwares list files directly at the storage root
-      const listings = subdirs.length > 0 ? subdirs.map((dir) => `${storage.path}${dir}/`) : [storage.path];
-      for (const listingPath of listings) {
-        const url = baseUrl(host, listingPath);
-        try {
-          const response = await cameraFetch(url, { headers: { "Cache-Control": "no-cache" } });
-          if (!response.ok) continue;
-          const html = await response.text();
-          for (const item of parseLunaIndex(html, url, storage.id)) {
-            if (seen.has(item.cameraPath)) continue;
-            seen.add(item.cameraPath);
-            items.push(item);
-          }
-        } catch {
-          // Skip unreachable listing, keep whatever else resolved
-        }
-      }
+    // Page through GET_FILE_LIST over the control session, collecting every
+    // file path, then build items and fetch each by URL (session-authorized).
+    const decoder = new TextDecoder();
+    const paths: string[] = [];
+    const limit = 50;
+    let start = 0;
+    let total = Infinity;
+    while (start < total) {
+      const fields = decodeRaw(await this.command(CODE_GET_FILE_LIST, fileListBody(MEDIA_VIDEO_AND_PHOTO, start, limit)));
+      const page = fields
+        .filter((f) => f.field === 1 && f.value instanceof Uint8Array)
+        .map((f) => decoder.decode(f.value as Uint8Array));
+      const totalField = fields.find((f) => f.field === 2 && typeof f.value === "number");
+      if (typeof totalField?.value === "number") total = totalField.value;
+      if (page.length === 0) break;
+      paths.push(...page);
+      start += page.length;
     }
+
+    const entries = entriesFromPaths(paths, (path) => baseUrl(host, path));
+    const items = buildMediaItems(entries);
     items.sort((a, b) => b.takenAt - a.takenAt);
     return items;
   },

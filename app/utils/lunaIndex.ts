@@ -75,43 +75,33 @@ export function extractCameraSubdirs(html: string): string[] {
   return dirs.sort();
 }
 
-/** Pairing key linking VID/LIV_..._00_001 media with LRV_..._01_001.lrv */
+/**
+ * Pairing key linking a full-res video with its .lrv proxy. Handles the old
+ * name shape (VID_<date>_<time>_<NN>_<clip>) and firmware 1.0.238's, which
+ * dropped the substream segment (VID_<date>_<time>_<clip>).
+ */
 function proxyKey(name: string): string | null {
-  const match = name.match(/^(?:VID|LRV|LIV)_(\d{8}_\d{6})_\d{2}_(\d+)\.\w+$/i);
-  return match ? `${match[1]}_${match[2]}` : null;
+  const legacy = name.match(/^(?:VID|LRV|LIV)_(\d{8}_\d{6})_\d{2}_(\d+)\.\w+$/i);
+  if (legacy) return `${legacy[1]}_${legacy[2]}`;
+  const next = name.match(/^(?:VID|LRV|LIV)_(.+)\.\w+$/i);
+  return next?.[1] ?? null;
 }
 
-export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStorage = "internal"): MediaItem[] {
-  interface RawEntry {
-    name: string;
-    url: string;
-    cameraPath: string;
-    extension: string;
-    takenAt: number;
-    size: number;
-  }
-  const entries: RawEntry[] = [];
-  for (const match of html.matchAll(INDEX_RE)) {
-    const groups = match.groups;
-    if (!groups) continue;
-    const href = htmlDecode(groups.href!);
-    const name = htmlDecode(groups.name!);
-    if (href === "../" || name === "../" || href.endsWith("/")) continue;
-    if (name.toLowerCase().endsWith(".live.mp4")) continue;
-    const extension = extensionOf(name);
-    if (!IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension) && extension !== "lrv") continue;
-    const url = new URL(href, baseUrl);
-    const timestamp = parseNameTimestamp(name) ?? parseIndexTimestamp(groups.date!, groups.time!);
-    entries.push({
-      name,
-      url: url.toString(),
-      cameraPath: decodeURIComponent(url.pathname),
-      extension,
-      takenAt: (timestamp ?? new Date(0)).getTime(),
-      size: parseIndexSize(groups.size!) ?? 0,
-    });
-  }
+export interface RawEntry {
+  name: string;
+  url: string;
+  cameraPath: string;
+  extension: string;
+  takenAt: number;
+  size: number;
+}
 
+/**
+ * Assemble MediaItems from raw file entries: pair .lrv video proxies and
+ * DNG+JPG siblings, flag 360 panos, drop the standalone proxies, and dedupe.
+ * Shared by the HTTP-index parser and the GET_FILE_LIST path.
+ */
+export function buildMediaItems(entries: RawEntry[], storage: MediaStorage = "internal"): MediaItem[] {
   const lrvByKey = new Map<string, RawEntry>();
   for (const entry of entries) {
     if (entry.extension !== "lrv") continue;
@@ -128,8 +118,11 @@ export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStor
   }
 
   const items: MediaItem[] = [];
+  const seen = new Set<string>();
   for (const entry of entries) {
     if (entry.extension === "lrv") continue;
+    if (seen.has(entry.cameraPath)) continue;
+    seen.add(entry.cameraPath);
     const isVideo = VIDEO_EXTENSIONS.has(entry.extension);
     const key = proxyKey(entry.name);
     const lrv = key ? lrvByKey.get(key) : undefined;
@@ -154,4 +147,54 @@ export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStor
     });
   }
   return items;
+}
+
+/**
+ * Build raw entries from GET_FILE_LIST paths. Firmware 1.0.238+ disabled the
+ * HTTP directory autoindex, so files are enumerated over the control session
+ * instead; each file stays fetchable by its URL while the session is held.
+ * Size isn't reported here — it's resolved lazily when a file is downloaded.
+ */
+export function entriesFromPaths(paths: string[], urlFor: (path: string) => string): RawEntry[] {
+  const entries: RawEntry[] = [];
+  for (const path of paths) {
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    if (name.toLowerCase().endsWith(".live.mp4")) continue;
+    const extension = extensionOf(name);
+    if (!IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension) && extension !== "lrv") continue;
+    entries.push({
+      name,
+      url: urlFor(path),
+      cameraPath: path,
+      extension,
+      takenAt: (parseNameTimestamp(name) ?? new Date(0)).getTime(),
+      size: 0,
+    });
+  }
+  return entries;
+}
+
+export function parseLunaIndex(html: string, baseUrl: string, storage: MediaStorage = "internal"): MediaItem[] {
+  const entries: RawEntry[] = [];
+  for (const match of html.matchAll(INDEX_RE)) {
+    const groups = match.groups;
+    if (!groups) continue;
+    const href = htmlDecode(groups.href!);
+    const name = htmlDecode(groups.name!);
+    if (href === "../" || name === "../" || href.endsWith("/")) continue;
+    if (name.toLowerCase().endsWith(".live.mp4")) continue;
+    const extension = extensionOf(name);
+    if (!IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension) && extension !== "lrv") continue;
+    const url = new URL(href, baseUrl);
+    const timestamp = parseNameTimestamp(name) ?? parseIndexTimestamp(groups.date!, groups.time!);
+    entries.push({
+      name,
+      url: url.toString(),
+      cameraPath: decodeURIComponent(url.pathname),
+      extension,
+      takenAt: (timestamp ?? new Date(0)).getTime(),
+      size: parseIndexSize(groups.size!) ?? 0,
+    });
+  }
+  return buildMediaItems(entries, storage);
 }

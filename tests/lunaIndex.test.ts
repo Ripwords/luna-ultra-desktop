@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMediaItems,
+  entriesFromPaths,
   extractCameraSubdirs,
   parseIndexSize,
   parseLunaIndex,
@@ -133,5 +135,42 @@ describe("RAW+JPEG sibling pairing", () => {
     const items = parseLunaIndex(html, CAMERA_BASE);
     expect(items.find((i) => i.name === "IMG_20260708_090000_124.dng")!.previewUrl).toBeUndefined();
     expect(items.find((i) => i.name === "IMG_20260707_200510_123.jpg")!.previewUrl).toBeUndefined();
+  });
+});
+
+describe("GET_FILE_LIST path listing (firmware 1.0.238+)", () => {
+  // Real filenames from the camera's GET_FILE_LIST response.
+  const paths = [
+    "/DCIM/Camera01/VID_20260724_182011_137.mp4",
+    "/DCIM/Camera01/LRV_20260724_182011_137.lrv",
+    "/DCIM/Camera01/IMG_20260724_134210_135.jpg",
+    "/DCIM/Camera01/IMG_20260724_134210_135.dng",
+  ];
+  const items = buildMediaItems(entriesFromPaths(paths, (p) => `http://192.168.42.1${p}`));
+
+  it("drops the .lrv proxy and keeps video + photos", () => {
+    expect(items.map((i) => i.name).sort()).toEqual([
+      "IMG_20260724_134210_135.dng",
+      "IMG_20260724_134210_135.jpg",
+      "VID_20260724_182011_137.mp4",
+    ]);
+  });
+
+  it("pairs the new-format LRV proxy with its video", () => {
+    const vid = items.find((i) => i.ext === "mp4")!;
+    expect(vid.type).toBe("video");
+    expect(vid.lrvUrl).toBe("http://192.168.42.1/DCIM/Camera01/LRV_20260724_182011_137.lrv");
+    expect(vid.srcUrl).toBe("http://192.168.42.1/DCIM/Camera01/VID_20260724_182011_137.mp4");
+  });
+
+  it("pairs a DNG with its sibling JPG as the preview", () => {
+    const dng = items.find((i) => i.ext === "dng")!;
+    expect(dng.type).toBe("photo");
+    expect(dng.previewUrl).toBe("http://192.168.42.1/DCIM/Camera01/IMG_20260724_134210_135.jpg");
+  });
+
+  it("parses the capture time from the filename", () => {
+    const vid = items.find((i) => i.ext === "mp4")!;
+    expect(vid.takenAt).toBe(new Date(2026, 6, 24, 18, 20, 11).getTime());
   });
 });

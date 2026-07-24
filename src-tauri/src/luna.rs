@@ -43,6 +43,7 @@ const CODE_GET_OPTIONS: u16 = 8;
 const CODE_SET_PHOTOGRAPHY_OPTIONS: u16 = 9;
 const CODE_GET_PHOTOGRAPHY_OPTIONS: u16 = 10;
 const CODE_DELETE_FILES: u16 = 12;
+const CODE_GET_FILE_LIST: u16 = 13;
 const CODE_GET_CURRENT_CAPTURE_STATUS: u16 = 15;
 
 const CONTROL_PORT: u16 = 6666;
@@ -595,6 +596,7 @@ fn is_allowed_command(code: u16) -> bool {
             | CODE_SET_PHOTOGRAPHY_OPTIONS
             | CODE_GET_PHOTOGRAPHY_OPTIONS
             | CODE_GET_CURRENT_CAPTURE_STATUS
+            | CODE_GET_FILE_LIST
     )
 }
 
