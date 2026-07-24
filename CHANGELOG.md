@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.2.1...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.2.1...master)
+
+### 🩹 Fixes
+
+- List media via GET_FILE_LIST to support camera firmware 1.0.238 ([072f60c](https://github.com/Ripwords/luna-ultra-desktop/commit/072f60c))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.2.0...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.2.0...master)
