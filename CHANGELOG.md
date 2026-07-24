@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.2.2...feat/camera-control
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.2.2...feat/camera-control)
+
+### 🚀 Enhancements
+
+- Load gallery thumbnails toward the viewport, opened item first ([f8b8fdb](https://github.com/Ripwords/luna-ultra-desktop/commit/f8b8fdb))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.2.1...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.2.1...master)
