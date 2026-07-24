@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v0.2.0...master
+
+[compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.2.0...master)
+
+### 🩹 Fixes
+
+- Retry the media library read while the camera authorizes HTTP ([61c007d](https://github.com/Ripwords/luna-ultra-desktop/commit/61c007d))
+
+### 📖 Documentation
+
+- Add camera control screenshot to README ([59d7582](https://github.com/Ripwords/luna-ultra-desktop/commit/59d7582))
+
+### ❤️ Contributors
+
+- JJ <teohjjteoh@gmail.com>
+
 ## v0.1.12...master
 
 [compare changes](https://github.com/Ripwords/luna-ultra-desktop/compare/v0.1.12...master)
