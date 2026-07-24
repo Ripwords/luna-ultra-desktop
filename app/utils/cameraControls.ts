@@ -232,3 +232,32 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     ],
   },
 ];
+
+/**
+ * White balance is two rival fields: the `white_balance` preset enum and the
+ * free-Kelvin `white_balance_value`. The camera only honours the Kelvin when the
+ * preset is non-auto, so a preset written on its own (with the Kelvin left at 0)
+ * reconciles back to auto and appears to do nothing. Pairing each preset with
+ * its Kelvin and writing both keeps them consistent.
+ */
+export const WHITE_BALANCE_KELVIN: Record<string, number> = {
+  WB_AUTO: 0,
+  WB_2700K: 2700,
+  WB_4000K: 4000,
+  WB_5000K: 5000,
+  WB_6500K: 6500,
+  WB_7500K: 7500,
+};
+
+/**
+ * `color_mode` and `gamma_mode` are two overlapping "picture profile" fields the
+ * firmware does not keep in sync (the probe caught color_mode=LOG alongside
+ * gamma_mode=STANDARD). Pair a colour choice with its matching gamma so the
+ * profile is unambiguous. HDR has no gamma of its own, so it keeps STANDARD.
+ */
+export const COLOR_MODE_GAMMA: Record<string, string> = {
+  COLOR_MODE_NORMAL: "STANDARD",
+  COLOR_MODE_LOG: "LOG",
+  COLOR_MODE_VIVID: "VIVID",
+  COLOR_MODE_HDR: "STANDARD",
+};

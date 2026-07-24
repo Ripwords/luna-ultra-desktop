@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ISO_STEPS, isoLabel, shutterLabel, shutterSteps } from "~/utils/cameraLabels";
+import {
+  ISO_STEPS,
+  isoLabel,
+  optionLabel,
+  shutterLabel,
+  shutterNameForSeconds,
+  shutterSeconds,
+  shutterSteps,
+  visibleEnumNames,
+} from "~/utils/cameraLabels";
 
 describe("shutterLabel", () => {
   it("renders fractions, where D means divide", () => {
@@ -64,5 +73,62 @@ describe("ISO_STEPS", () => {
     expect(ISO_STEPS[0]).toBe(0);
     expect(ISO_STEPS).toContain(100);
     expect(ISO_STEPS).toContain(6400);
+  });
+});
+
+describe("shutterSeconds", () => {
+  it("converts fractions and decimals to seconds", () => {
+    expect(shutterSeconds("SPEED_1D120")).toBeCloseTo(1 / 120, 6);
+    expect(shutterSeconds("SPEED_1D8000")).toBeCloseTo(1 / 8000, 8);
+    expect(shutterSeconds("SPEED_1P3")).toBe(1.3);
+    expect(shutterSeconds("SPEED_5")).toBe(5);
+  });
+
+  it("treats auto and junk as 0", () => {
+    expect(shutterSeconds("SPEED_AUTO")).toBe(0);
+    expect(shutterSeconds("nonsense")).toBe(0);
+  });
+});
+
+describe("shutterNameForSeconds", () => {
+  it("maps 0 seconds back to Auto", () => {
+    expect(shutterNameForSeconds(0)).toBe("SPEED_AUTO");
+  });
+
+  it("round-trips a real shutter value through seconds and back", () => {
+    for (const name of ["SPEED_1D120", "SPEED_1D8000", "SPEED_1P3"]) {
+      expect(shutterNameForSeconds(shutterSeconds(name))).toBe(name);
+    }
+  });
+});
+
+describe("optionLabel", () => {
+  it("names color modes the way the camera does", () => {
+    expect(optionLabel("COLOR_MODE_NORMAL")).toBe("Standard");
+    expect(optionLabel("COLOR_MODE_LOG")).toBe("i-Log");
+    expect(optionLabel("COLOR_MODE_HDR")).toBe("Dolby Vision");
+  });
+
+  it("labels white balance presets cleanly", () => {
+    expect(optionLabel("WB_AUTO")).toBe("Auto");
+    expect(optionLabel("WB_5000K")).toBe("5000K");
+  });
+
+  it("tidies unlisted enum values instead of failing", () => {
+    expect(optionLabel("FOV_WIDE")).toBe("FOV WIDE");
+  });
+});
+
+describe("visibleEnumNames", () => {
+  it("drops Vivid from color mode but keeps Standard / i-Log / Dolby Vision", () => {
+    const modes = visibleEnumNames("insta360.messages.PhotographyOptions.COLOR_MODE");
+    expect(modes).toEqual(["COLOR_MODE_NORMAL", "COLOR_MODE_LOG", "COLOR_MODE_HDR"]);
+  });
+
+  it("hides gamma_mode's phantom Leica looks but keeps the real curves", () => {
+    const gammas = visibleEnumNames("insta360.messages.GammaMode");
+    expect(gammas).toEqual(["STANDARD", "LOG", "VIVID", "FLAT"]);
+    expect(gammas).not.toContain("URBAN_1");
+    expect(gammas).not.toContain("NIGHTLIGHT_2");
   });
 });

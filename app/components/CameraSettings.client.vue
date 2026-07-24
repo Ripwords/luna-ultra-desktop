@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { CONTROL_SECTIONS, type Control } from "~/utils/cameraControls";
-import { enumNames } from "~/utils/lunaProto";
+import { CONTROL_SECTIONS, type Control, type ControlSection } from "~/utils/cameraControls";
+import { optionLabel, visibleEnumNames } from "~/utils/cameraLabels";
+import { FEATURES } from "~/utils/features";
 import type { ProtoValue } from "~/utils/lunaProto";
 
-const { settings, device, saving, status, update, updateDevice } = useCameraSettings();
+const { settings, device, saving, status, update, updateDevice, setWhiteBalance, setColorMode } =
+  useCameraSettings();
 
 /**
  * Each control reports what the camera said when the value was read straight
@@ -32,13 +34,23 @@ const verdict = (field: string) => {
 const source = (control: Control) => (control.scope === "device" ? device : settings);
 const valueOf = (control: Control) => source(control).value[control.field];
 
-const options = (name: string) =>
-  enumNames(name).map((value) => ({ label: value.replace(/_/g, " "), value }));
+/** Drop controls behind an off feature flag (currently just the color mode). */
+const visibleControls = (section: ControlSection): Control[] =>
+  section.controls.filter((control) => FEATURES.colorMode || control.field !== "color_mode");
 
-const apply = (control: Control, value: ProtoValue) =>
-  control.scope === "device"
+const options = (name: string) =>
+  visibleEnumNames(name).map((value) => ({ label: optionLabel(value), value }));
+
+const apply = (control: Control, value: ProtoValue) => {
+  // White balance and colour profile each need a companion field written in the
+  // same request, so they go through dedicated setters rather than the generic
+  // single-field write.
+  if (control.field === "white_balance") return setWhiteBalance(String(value));
+  if (control.field === "color_mode") return setColorMode(String(value));
+  return control.scope === "device"
     ? updateDevice(control.option, control.field, value)
     : update(control.option, control.field, value);
+};
 
 /**
  * Before any read we know nothing, so leave everything enabled rather than
@@ -67,7 +79,7 @@ const asNumber = (control: Control): number => {
       </h3>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <UFormField v-for="control in section.controls" :key="control.field" :help="control.hint">
+        <UFormField v-for="control in visibleControls(section)" :key="control.field" :help="control.hint">
           <template #label>
             <span class="flex items-center gap-1.5">
               {{ control.label }}

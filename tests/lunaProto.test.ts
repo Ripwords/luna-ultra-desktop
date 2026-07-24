@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MSG, decodeMessage, encodeMessage, enumNames, enumValue } from "~/utils/lunaProto";
+import {
+  MSG,
+  decodeMessage,
+  encodeMessage,
+  enumNames,
+  enumValue,
+  isDefaultValue,
+} from "~/utils/lunaProto";
 
 const hex = (s: string) => new Uint8Array(s.match(/../g)!.map((b) => parseInt(b, 16)));
 
@@ -104,5 +111,34 @@ describe("enum helpers", () => {
     const names = enumNames("insta360.messages.PhotographyOptions.WhiteBalance");
     expect(names).toContain("WB_AUTO");
     expect(names).toContain("WB_6500K");
+  });
+});
+
+describe("isDefaultValue", () => {
+  const PO = MSG.PhotographyOptions;
+
+  it("treats a bool false as the default and true as set", () => {
+    expect(isDefaultValue(PO, "metering_enable", false)).toBe(true);
+    expect(isDefaultValue(PO, "metering_enable", true)).toBe(false);
+  });
+
+  it("treats a numeric zero as the default", () => {
+    expect(isDefaultValue(PO, "sharpness", 0)).toBe(true);
+    expect(isDefaultValue(PO, "sharpness", 3)).toBe(false);
+  });
+
+  it("resolves an enum value-name to its number: the zero value is the default", () => {
+    // WhiteBalance: WB_AUTO=0, WB_5000K=3
+    expect(isDefaultValue(PO, "white_balance", "WB_AUTO")).toBe(true);
+    expect(isDefaultValue(PO, "white_balance", "WB_5000K")).toBe(false);
+    expect(isDefaultValue(PO, "white_balance", 0)).toBe(true);
+  });
+
+  it("treats a nested message value as non-default", () => {
+    expect(isDefaultValue(PO, "exposure_manual", { iso: 0 })).toBe(false);
+  });
+
+  it("treats an unknown field as non-default rather than guessing", () => {
+    expect(isDefaultValue(PO, "not_a_field", 0)).toBe(false);
   });
 });

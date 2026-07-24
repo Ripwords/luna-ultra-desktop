@@ -1,9 +1,19 @@
 import { CAPTURE_MODES, findMode, modeForState, type CameraMode } from "~/utils/cameraModes";
+import { FEATURES } from "~/utils/features";
 import { readCaptureStatus, startCapture, stopCapture, takePicture } from "~/utils/lunaCapture";
 import { writeDeviceOptions } from "~/utils/lunaSettings";
 
 /** How often to ask the camera what it is doing while a capture runs. */
 const POLL_MS = 1000;
+
+/**
+ * Modes offered in the strip. Detection still uses the full CAPTURE_MODES list,
+ * so a camera already in a hidden mode is recognised — we just don't offer to
+ * switch into the ones that aren't verified yet.
+ */
+const VISIBLE_MODES = FEATURES.extraCaptureModes
+  ? CAPTURE_MODES
+  : CAPTURE_MODES.filter((mode) => mode.id === "video" || mode.id === "photo");
 
 export function useCameraCapture() {
   const { isConnected } = useCamera();
@@ -31,13 +41,24 @@ export function useCameraCapture() {
     }
   }
 
-  /** Adopt whatever mode the camera is actually in, rather than assuming. */
+  /**
+   * Adopt whatever mode the camera is actually in, rather than assuming.
+   *
+   * Crucially this also points the settings layer at that mode's option set.
+   * Photography options are stored per function mode, so a stale `functionMode`
+   * sends every write to the wrong mode — and because the read-back checks that
+   * same wrong mode, it agrees and the UI reports a false "applied" while the
+   * live camera is untouched. Setting `functionMode` triggers a settings reload
+   * through its own watcher in useCameraSettings.
+   */
   function syncModeFromCamera() {
     const detected = modeForState(
       device.value.video_sub_mode ? String(device.value.video_sub_mode) : undefined,
       device.value.photo_sub_mode ? String(device.value.photo_sub_mode) : undefined,
     );
-    if (detected) modeId.value = detected.id;
+    if (!detected) return;
+    modeId.value = detected.id;
+    functionMode.value = detected.functionMode;
   }
 
   async function selectMode(id: string) {
@@ -114,7 +135,7 @@ export function useCameraCapture() {
   });
 
   return {
-    modes: CAPTURE_MODES,
+    modes: VISIBLE_MODES,
     modeId,
     current,
     isPhoto,

@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { isoLabel, isoSteps, shutterLabel, shutterSteps } from "~/utils/cameraLabels";
-import { enumNames } from "~/utils/lunaProto";
+import {
+  isoLabel,
+  isoSteps,
+  optionLabel,
+  shutterLabel,
+  shutterNameForSeconds,
+  shutterSteps,
+  visibleEnumNames,
+} from "~/utils/cameraLabels";
+import { FEATURES } from "~/utils/features";
 import type { ProtoObject } from "~/utils/lunaProto";
 
 /**
@@ -8,23 +16,56 @@ import type { ProtoObject } from "~/utils/lunaProto";
  * current value, one of which expands into a wheel. Only one wheel is open at
  * a time, which is what keeps the row readable on a narrow window.
  */
-const { settings, saving, status, update, setManualExposure } = useCameraSettings();
+const { settings, saving, status, update, setExposure, setWhiteBalanceKelvin, setColorMode } =
+  useCameraSettings();
+
+/** The gear hands control back to the page, which owns the settings drawer. */
+const emit = defineEmits<{ "open-settings": [] }>();
 
 type ChipId = "iso" | "shutter" | "ev" | "colour" | "wb" | "sharpness";
 
 const open = ref<ChipId | null>(null);
 const toggle = (id: ChipId) => (open.value = open.value === id ? null : id);
 
-const manual = computed(() => (settings.value.exposure_manual as ProtoObject | undefined) ?? {});
-const manualIso = computed(() => Number(manual.value.iso ?? 0));
-const manualShutter = computed(() => String(manual.value.shutter_speed ?? "SPEED_AUTO"));
+// Exposure lives in video_exposure now: iso (0 = Auto) and shutter_speed as raw
+// seconds (0 = Auto). Map the seconds back to a wheel step for display.
+const videoExp = computed(() => (settings.value.video_exposure as ProtoObject | undefined) ?? {});
+const manualIso = computed(() => Number(videoExp.value.iso ?? 0));
+const shutterSecs = computed(() => Number(videoExp.value.shutter_speed ?? 0));
+const manualShutter = computed(() => shutterNameForSeconds(shutterSecs.value));
+const isoAuto = computed(() => manualIso.value === 0);
+const shutterAuto = computed(() => shutterSecs.value === 0);
 
-const isAuto = computed(() => settings.value.exposure_mode !== "EXP_MODE_MANUAL");
-
-const evSteps = Array.from({ length: 9 }, (_, i) => {
-  const value = i - 4;
-  return { value: String(value), label: value > 0 ? `+${value}` : String(value) };
+/** The camera's EV compensation is in 1/3 stops (0, 0.3, 0.7, 1.0, …). We send
+ * exposure_bias as a signed count of thirds and label it as the EV it shows. */
+const evLabel = (thirds: number): string => {
+  if (!thirds) return "0";
+  const ev = (Math.round((thirds / 3) * 10) / 10).toFixed(1);
+  return thirds > 0 ? `+${ev}` : ev;
+};
+const evSteps = Array.from({ length: 25 }, (_, i) => {
+  const thirds = i - 12; // ±4.0 EV in 1/3 stops, matching the camera's dial
+  return { value: String(thirds), label: evLabel(thirds) };
 });
+
+/** The camera's white balance dial: Auto plus 2000–10000K in 200K steps. */
+const wbSteps = [
+  { value: "0", label: "Auto" },
+  ...Array.from({ length: 41 }, (_, i) => {
+    const k = 2000 + i * 200;
+    return { value: String(k), label: `${k / 1000}K` };
+  }),
+];
+// The camera's white_balance_value read-back is unreliable (it reports 10000 no
+// matter what, though the write itself works), so drive the wheel off the last
+// value the user picked, falling back to the read value only before any choice.
+const wbChoice = ref<number | null>(null);
+const wbKelvin = computed(() => wbChoice.value ?? Number(settings.value.white_balance_value ?? 0));
+const wbIsAuto = computed(() => wbKelvin.value === 0);
+const selectWb = (kelvin: number) => {
+  wbChoice.value = kelvin;
+  void setWhiteBalanceKelvin(kelvin);
+};
 
 const sharpnessSteps = [
   { value: "0", label: "Off" },
@@ -34,40 +75,42 @@ const sharpnessSteps = [
   { value: "4", label: "Max" },
 ];
 
-const enumSteps = (name: string, strip: string) =>
-  enumNames(name).map((value) => ({ value, label: value.replace(strip, "").replace(/_/g, " ") }));
+const enumSteps = (name: string) =>
+  visibleEnumNames(name).map((value) => ({ value, label: optionLabel(value) }));
 
 const chips = computed(() => [
-  { id: "iso" as const, label: "ISO", value: isAuto.value ? "Auto" : isoLabel(manualIso.value) },
+  { id: "iso" as const, label: "ISO", value: isoAuto.value ? "Auto" : isoLabel(manualIso.value) },
   {
     id: "shutter" as const,
     label: "SHUTTER",
-    value: isAuto.value ? "Auto" : shutterLabel(manualShutter.value),
+    value: shutterAuto.value ? "Auto" : shutterLabel(manualShutter.value),
   },
-  { id: "ev" as const, label: "EV", value: String(settings.value.exposure_bias ?? 0) },
+  { id: "ev" as const, label: "EV", value: evLabel(Number(settings.value.exposure_bias ?? 0)) },
   {
     id: "colour" as const,
     label: "COLOR",
-    value: String(settings.value.color_mode ?? "—").replace("COLOR_MODE_", ""),
+    value: settings.value.color_mode ? optionLabel(String(settings.value.color_mode)) : "—",
   },
   {
     id: "wb" as const,
     label: "WB",
-    value: String(settings.value.white_balance ?? "—").replace("WB_", ""),
+    value: wbIsAuto.value ? "Auto" : `${wbKelvin.value / 1000}K`,
   },
   {
     id: "sharpness" as const,
     label: "SHARP",
     value: sharpnessSteps[Number(settings.value.sharpness ?? 0)]?.label ?? "—",
   },
-]);
+].filter((chip) => FEATURES.colorMode || chip.id !== "colour"));
 
 const FIELD_OF: Record<ChipId, string> = {
-  iso: "exposure_manual",
-  shutter: "exposure_manual",
+  // Manual ISO/shutter now write video_exposure/still_exposure, so the verdict
+  // (applied/assumed) that tells us whether manual stuck lives on that field.
+  iso: "video_exposure",
+  shutter: "video_exposure",
   ev: "exposure_bias",
   colour: "color_mode",
-  wb: "white_balance",
+  wb: "white_balance_value",
   sharpness: "sharpness",
 };
 
@@ -87,43 +130,24 @@ const busy = (id: ChipId) => saving.value === FIELD_OF[id];
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-      <button
-        v-for="chip in chips"
-        :key="chip.id"
-        type="button"
-        class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-2 transition-colors"
-        :class="open === chip.id ? 'bg-elevated' : 'hover:bg-elevated/60'"
-        @click="toggle(chip.id)"
-      >
-        <span class="flex items-center gap-1 text-[10px] font-medium tracking-wider text-dimmed">
-          {{ chip.label }}
-          <UIcon
-            v-if="verdict(chip.id)"
-            :name="verdict(chip.id)!.icon"
-            :class="verdict(chip.id)!.color"
-            class="size-3"
-          />
-        </span>
-        <span class="truncate text-sm font-medium text-highlighted">{{ chip.value }}</span>
-      </button>
-    </div>
-
-    <div v-if="open" class="rounded-lg bg-elevated/50 p-2">
+  <div class="flex flex-col gap-2">
+    <div
+      v-if="open"
+      class="rounded-xl bg-black/60 p-1.5 backdrop-blur-md"
+    >
       <CameraWheel
         v-if="open === 'iso'"
         :steps="isoSteps()"
-        :model-value="isAuto ? '0' : String(manualIso)"
+        :model-value="String(manualIso)"
         :busy="busy('iso')"
-        @update:model-value="(value) => setManualExposure({ iso: Number(value) })"
+        @update:model-value="(value) => setExposure({ iso: Number(value) })"
       />
       <CameraWheel
         v-else-if="open === 'shutter'"
         :steps="shutterSteps()"
-        :model-value="isAuto ? 'SPEED_AUTO' : manualShutter"
+        :model-value="manualShutter"
         :busy="busy('shutter')"
-        @update:model-value="(value) => setManualExposure({ shutter_speed: value })"
+        @update:model-value="(value) => setExposure({ shutter_speed: value })"
       />
       <CameraWheel
         v-else-if="open === 'ev'"
@@ -134,17 +158,17 @@ const busy = (id: ChipId) => saving.value === FIELD_OF[id];
       />
       <CameraWheel
         v-else-if="open === 'colour'"
-        :steps="enumSteps('insta360.messages.PhotographyOptions.COLOR_MODE', 'COLOR_MODE_')"
+        :steps="enumSteps('insta360.messages.PhotographyOptions.COLOR_MODE')"
         :model-value="settings.color_mode ? String(settings.color_mode) : undefined"
         :busy="busy('colour')"
-        @update:model-value="(value) => update('COLOR_MODE', 'color_mode', value)"
+        @update:model-value="(value) => setColorMode(value)"
       />
       <CameraWheel
         v-else-if="open === 'wb'"
-        :steps="enumSteps('insta360.messages.PhotographyOptions.WhiteBalance', 'WB_')"
-        :model-value="settings.white_balance ? String(settings.white_balance) : undefined"
+        :steps="wbSteps"
+        :model-value="String(wbKelvin)"
         :busy="busy('wb')"
-        @update:model-value="(value) => update('WHITE_BALANCE', 'white_balance', value)"
+        @update:model-value="(value) => selectWb(Number(value))"
       />
       <CameraWheel
         v-else-if="open === 'sharpness'"
@@ -155,8 +179,43 @@ const busy = (id: ChipId) => saving.value === FIELD_OF[id];
       />
     </div>
 
-    <p v-if="isAuto && (open === 'iso' || open === 'shutter')" class="text-xs text-muted">
-      Choosing a value switches the camera to manual exposure.
+    <p
+      v-if="(open === 'iso' && isoAuto) || (open === 'shutter' && shutterAuto)"
+      class="rounded-lg bg-black/50 px-2 py-1 text-center text-xs text-white/70 backdrop-blur-md"
+    >
+      Pick a value to take this off Auto; leave both on Auto for full auto exposure.
     </p>
+
+    <div class="flex items-stretch gap-0.5 overflow-x-auto rounded-xl bg-black/50 p-1 backdrop-blur-md">
+      <button
+        v-for="chip in chips"
+        :key="chip.id"
+        type="button"
+        class="flex min-w-14 flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 transition-colors"
+        :class="open === chip.id ? 'bg-white/20' : 'hover:bg-white/10'"
+        @click="toggle(chip.id)"
+      >
+        <span class="flex items-center gap-1 text-[10px] font-medium tracking-wider text-white/50">
+          {{ chip.label }}
+          <UIcon
+            v-if="verdict(chip.id)"
+            :name="verdict(chip.id)!.icon"
+            :class="verdict(chip.id)!.color"
+            class="size-3"
+          />
+        </span>
+        <span class="max-w-full truncate text-sm font-medium text-white">{{ chip.value }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="flex min-w-14 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        aria-label="Open camera settings"
+        @click="emit('open-settings')"
+      >
+        <UIcon name="i-lucide-sliders-horizontal" class="size-4" />
+        <span class="text-[10px] font-medium tracking-wider">MORE</span>
+      </button>
+    </div>
   </div>
 </template>

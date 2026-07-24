@@ -8,7 +8,7 @@
  * with similar names.
  */
 
-export type CaptureModeId = "video" | "pure" | "slowmo" | "photo" | "pano" | "timelapse";
+export type CaptureModeId = "video" | "pure" | "slowmo" | "photo" | "pano" | "panoHdr" | "timelapse";
 
 export interface CameraMode {
   id: CaptureModeId;
@@ -66,6 +66,14 @@ export const CAPTURE_MODES: CameraMode[] = [
     field: "photo_sub_mode",
     subMode: "PHOTO_INSTA_PANO",
     functionMode: "FUNCTION_MODE_NORMAL_POWER_PANO_IMAGE",
+  },
+  {
+    id: "panoHdr",
+    label: "Pano HDR",
+    optionType: "PHOTO_SUB_MODE",
+    field: "photo_sub_mode",
+    subMode: "PHOTO_INSTA_PANO_HDR",
+    functionMode: "FUNCTION_MODE_HDR_POWER_PANO_IMAGE",
   },
   {
     id: "timelapse",

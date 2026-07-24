@@ -102,6 +102,25 @@ function toNumber(spec: FieldSpec, value: ProtoValue): number {
 const isDefault = (spec: FieldSpec, value: ProtoValue): boolean =>
   spec.type === "bool" ? value === false : spec.type === "string" ? value === "" : value === 0;
 
+/**
+ * Whether `value` is the proto3 default for a named field — the value that
+ * serialises to nothing and so reads back as an omitted field. Enums count
+ * their zero-numbered value as the default (a value-name is resolved first).
+ * Callers use this to tell an intentional "Auto/Off/0" write, whose empty
+ * read-back is expected, apart from a write that genuinely vanished. An unknown
+ * message or field is reported as non-default so "I can't tell" is never
+ * mistaken for "it's the default".
+ */
+export function isDefaultValue(messageName: string, field: string, value: ProtoValue): boolean {
+  const spec = Object.values(schema.messages[messageName] ?? {}).find((f) => f.name === field);
+  if (!spec) return false;
+  if (spec.type === "enum") {
+    const number = typeof value === "number" ? value : enumValue(spec.ref ?? "", String(value));
+    return number === 0;
+  }
+  return isDefault(spec, value);
+}
+
 function encodeField(number: number, spec: FieldSpec, value: ProtoValue): number[] {
   if (spec.type === "message") {
     return encodeLengthDelimited(number, encodeMessage(spec.ref ?? "", value as ProtoObject));
